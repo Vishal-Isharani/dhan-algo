@@ -132,6 +132,9 @@ def execute_strategy_run(dhan, run: StrategyRun, *, skip_wait: bool = False) -> 
                 exit_reason=exit_info["exit_reason"],
                 exit_price=exit_info.get("exit_price"),
                 status=exit_info["status"],
+                notes=exit_info.get("notes", ""),
+                entry_fill_price=exit_info.get("entry_fill_price"),
+                exit_fill_price=exit_info.get("exit_fill_price"),
             )
 
     return 0

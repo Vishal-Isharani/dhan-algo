@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from datetime import datetime
@@ -29,17 +30,21 @@ CREATE TABLE IF NOT EXISTS trades (
     strike REAL,
     expiry TEXT,
     security_id TEXT,
+    underlying_security_id TEXT,
     trading_symbol TEXT,
 
     direction TEXT,
     mover_rank INTEGER,
     mover_change_pct REAL,
+    mover_ltp REAL,
     spot REAL,
 
     entry_price REAL,
+    entry_fill_price REAL,
     target_price REAL,
     stop_loss_price REAL,
     exit_price REAL,
+    exit_fill_price REAL,
     quantity INTEGER,
     lot_size INTEGER,
     lots INTEGER,
@@ -54,6 +59,14 @@ CREATE TABLE IF NOT EXISTS trades (
 )
 """
 
+MIGRATION_COLUMNS = {
+    "strategy_type": "TEXT NOT NULL DEFAULT 'unknown'",
+    "underlying_security_id": "TEXT",
+    "mover_ltp": "REAL",
+    "entry_fill_price": "REAL",
+    "exit_fill_price": "REAL",
+}
+
 
 def _now() -> str:
     return datetime.now(IST).isoformat()
@@ -65,17 +78,39 @@ def _connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(trades)")}
-    if "strategy_type" not in columns:
-        conn.execute("ALTER TABLE trades ADD COLUMN strategy_type TEXT NOT NULL DEFAULT 'unknown'")
-        conn.commit()
+    for column, definition in MIGRATION_COLUMNS.items():
+        if column not in columns:
+            conn.execute(f"ALTER TABLE trades ADD COLUMN {column} {definition}")
+    conn.commit()
     return conn
 
 
-def _calc_pnl(entry: float, exit_price: float | None, quantity: int) -> tuple[float | None, float | None]:
-    if exit_price is None:
+def _effective_entry(entry_price: float | None, entry_fill_price: float | None) -> float | None:
+    if entry_fill_price is not None:
+        return entry_fill_price
+    return entry_price
+
+
+def _effective_exit(exit_price: float | None, exit_fill_price: float | None) -> float | None:
+    if exit_fill_price is not None:
+        return exit_fill_price
+    return exit_price
+
+
+def _calc_pnl(
+    entry_price: float | None,
+    exit_price: float | None,
+    quantity: int,
+    *,
+    entry_fill_price: float | None = None,
+    exit_fill_price: float | None = None,
+) -> tuple[float | None, float | None]:
+    entry = _effective_entry(entry_price, entry_fill_price)
+    exit_val = _effective_exit(exit_price, exit_fill_price)
+    if entry is None or exit_val is None:
         return None, None
-    pnl = round((exit_price - entry) * quantity, 2)
-    pnl_pct = round(((exit_price - entry) / entry) * 100, 2) if entry else None
+    pnl = round((exit_val - entry) * quantity, 2)
+    pnl_pct = round(((exit_val - entry) / entry) * 100, 2) if entry else None
     return pnl, pnl_pct
 
 
@@ -89,10 +124,12 @@ def _fields_from_prepared(prepared: PreparedOrder | None) -> dict:
         "strike": extra.get("atm_strike"),
         "expiry": extra.get("expiry"),
         "security_id": prepared.security_id,
+        "underlying_security_id": extra.get("underlying_security_id"),
         "trading_symbol": prepared.trading_symbol,
         "direction": extra.get("direction"),
         "mover_rank": extra.get("mover_rank"),
         "mover_change_pct": extra.get("mover_change_pct"),
+        "mover_ltp": extra.get("mover_ltp"),
         "spot": extra.get("spot"),
         "entry_price": prepared.entry_price,
         "target_price": prepared.target_price,
@@ -111,6 +148,7 @@ def log_trade_open(
     order_id: str | None,
     order_status: str | None,
     lots: int,
+    entry_fill_price: float | None = None,
 ) -> int:
     now = _now()
     fields = _fields_from_prepared(prepared)
@@ -119,11 +157,11 @@ def log_trade_open(
             """
             INSERT INTO trades (
                 created_at, updated_at, strategy_name, strategy_type, strategy_config, status,
-                symbol, option_side, strike, expiry, security_id, trading_symbol,
-                direction, mover_rank, mover_change_pct, spot,
-                entry_price, target_price, stop_loss_price, quantity, lot_size, lots,
-                order_id, order_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                symbol, option_side, strike, expiry, security_id, underlying_security_id,
+                trading_symbol, direction, mover_rank, mover_change_pct, mover_ltp, spot,
+                entry_price, entry_fill_price, target_price, stop_loss_price,
+                quantity, lot_size, lots, order_id, order_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 now,
@@ -137,12 +175,15 @@ def log_trade_open(
                 fields.get("strike"),
                 fields.get("expiry"),
                 fields.get("security_id"),
+                fields.get("underlying_security_id"),
                 fields.get("trading_symbol"),
                 fields.get("direction"),
                 fields.get("mover_rank"),
                 fields.get("mover_change_pct"),
+                fields.get("mover_ltp"),
                 fields.get("spot"),
                 fields.get("entry_price"),
+                entry_fill_price,
                 fields.get("target_price"),
                 fields.get("stop_loss_price"),
                 fields.get("quantity"),
@@ -171,11 +212,11 @@ def log_trade_failed(
             """
             INSERT INTO trades (
                 created_at, updated_at, strategy_name, strategy_type, strategy_config, status,
-                symbol, option_side, strike, expiry, security_id, trading_symbol,
-                direction, mover_rank, mover_change_pct, spot,
+                symbol, option_side, strike, expiry, security_id, underlying_security_id,
+                trading_symbol, direction, mover_rank, mover_change_pct, mover_ltp, spot,
                 entry_price, target_price, stop_loss_price, quantity, lot_size, lots,
                 exit_reason, notes, pnl, pnl_pct
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 now,
@@ -189,10 +230,12 @@ def log_trade_failed(
                 fields.get("strike"),
                 fields.get("expiry"),
                 fields.get("security_id"),
+                fields.get("underlying_security_id"),
                 fields.get("trading_symbol"),
                 fields.get("direction"),
                 fields.get("mover_rank"),
                 fields.get("mover_change_pct"),
+                fields.get("mover_ltp"),
                 fields.get("spot"),
                 fields.get("entry_price"),
                 fields.get("target_price"),
@@ -217,22 +260,49 @@ def update_trade_exit(
     exit_price: float | None,
     status: str,
     notes: str = "",
+    entry_fill_price: float | None = None,
+    exit_fill_price: float | None = None,
 ) -> None:
     now = _now()
     with _connect() as conn:
-        row = conn.execute("SELECT entry_price, quantity FROM trades WHERE id = ?", (trade_id,)).fetchone()
+        row = conn.execute(
+            "SELECT entry_price, entry_fill_price, quantity FROM trades WHERE id = ?",
+            (trade_id,),
+        ).fetchone()
         if not row:
             return
 
-        pnl, pnl_pct = _calc_pnl(float(row["entry_price"]), exit_price, int(row["quantity"]))
+        effective_entry_fill = entry_fill_price
+        if effective_entry_fill is None and row["entry_fill_price"] is not None:
+            effective_entry_fill = float(row["entry_fill_price"])
+
+        pnl, pnl_pct = _calc_pnl(
+            float(row["entry_price"]) if row["entry_price"] is not None else None,
+            exit_price,
+            int(row["quantity"]),
+            entry_fill_price=effective_entry_fill,
+            exit_fill_price=exit_fill_price,
+        )
         conn.execute(
             """
             UPDATE trades
             SET updated_at = ?, status = ?, exit_reason = ?, exit_price = ?,
-                pnl = ?, pnl_pct = ?, notes = ?
+                entry_fill_price = COALESCE(?, entry_fill_price),
+                exit_fill_price = ?, pnl = ?, pnl_pct = ?, notes = ?
             WHERE id = ?
             """,
-            (now, status, exit_reason, exit_price, pnl, pnl_pct, notes, trade_id),
+            (
+                now,
+                status,
+                exit_reason,
+                exit_price,
+                entry_fill_price,
+                exit_fill_price,
+                pnl,
+                pnl_pct,
+                notes,
+                trade_id,
+            ),
         )
         conn.commit()
 
@@ -241,7 +311,7 @@ def list_trades(
     *,
     strategy_name: str | None = None,
     strategy_type: str | None = None,
-    limit: int = 50,
+    limit: int | None = 50,
 ) -> list[dict]:
     query = "SELECT * FROM trades"
     filters: list[str] = []
@@ -254,8 +324,10 @@ def list_trades(
         params.append(strategy_type)
     if filters:
         query += " WHERE " + " AND ".join(filters)
-    query += " ORDER BY id DESC LIMIT ?"
-    params.append(limit)
+    query += " ORDER BY id DESC"
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
 
     with _connect() as conn:
         rows = conn.execute(query, params).fetchall()
@@ -273,6 +345,7 @@ def summary_stats(
             SUM(CASE WHEN status IN ('target', 'stop_loss', 'closed') THEN 1 ELSE 0 END) AS closed_trades,
             SUM(CASE WHEN status = 'target' THEN 1 ELSE 0 END) AS targets,
             SUM(CASE WHEN status = 'stop_loss' THEN 1 ELSE 0 END) AS stop_losses,
+            SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS eod_exits,
             SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failures,
             ROUND(SUM(COALESCE(pnl, 0)), 2) AS total_pnl,
             ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END), 2) AS avg_pnl
@@ -292,3 +365,61 @@ def summary_stats(
     with _connect() as conn:
         row = conn.execute(query, params).fetchone()
         return dict(row) if row else {}
+
+
+def export_trades_csv(
+    path: Path | str,
+    *,
+    strategy_name: str | None = None,
+    strategy_type: str | None = None,
+) -> int:
+    """Export all matching trades to CSV. Returns number of rows written."""
+
+    rows = list_trades(strategy_name=strategy_name, strategy_type=strategy_type, limit=None)
+    output = Path(path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = [
+        "id",
+        "created_at",
+        "updated_at",
+        "strategy_name",
+        "strategy_type",
+        "status",
+        "symbol",
+        "trading_symbol",
+        "option_side",
+        "strike",
+        "expiry",
+        "direction",
+        "mover_rank",
+        "mover_change_pct",
+        "mover_ltp",
+        "spot",
+        "entry_price",
+        "entry_fill_price",
+        "target_price",
+        "stop_loss_price",
+        "exit_price",
+        "exit_fill_price",
+        "quantity",
+        "lot_size",
+        "lots",
+        "pnl",
+        "pnl_pct",
+        "exit_reason",
+        "order_id",
+        "order_status",
+        "security_id",
+        "underlying_security_id",
+        "strategy_config",
+        "notes",
+    ]
+
+    with output.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+    return len(rows)
