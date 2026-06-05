@@ -1,0 +1,12 @@
+{
+  "direction": "gainers",
+  "rank": 1,
+  "lots": 1,
+  "product": "INTRADAY",
+  "order_type": "LIMIT",
+  "expiry": null,
+  "run_at": "09:20",
+  "target_pct": 25,
+  "stop_loss_pct": 15,
+  "trailing_jump": 0
+}
