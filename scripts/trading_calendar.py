@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -76,3 +76,52 @@ def is_trading_day(day: date | None = None) -> bool:
     if day.weekday() >= 5:
         return False
     return day not in get_holiday_dates()
+
+
+def next_trading_day(from_day: date | None = None) -> date | None:
+    """Return the next NSE trading day after ``from_day``."""
+
+    from_day = from_day or datetime.now(IST).date()
+    candidate = from_day + timedelta(days=1)
+    for _ in range(14):
+        if is_trading_day(candidate):
+            return candidate
+        candidate += timedelta(days=1)
+    return None
+
+
+def trading_day_gap(from_day: date, to_day: date) -> int | None:
+    """Count trading sessions strictly between ``from_day`` and ``to_day``."""
+
+    if to_day <= from_day:
+        return 0
+
+    gap = 0
+    cursor = from_day + timedelta(days=1)
+    while cursor < to_day:
+        if is_trading_day(cursor):
+            gap += 1
+        cursor += timedelta(days=1)
+    return gap
+
+
+def can_btst_entry_today(today: date | None = None) -> tuple[bool, str]:
+    """BTST entry allowed only Mon-Thu with exactly one trading day until exit."""
+
+    today = today or datetime.now(IST).date()
+    if today.weekday() == 4:
+        return False, "Friday — no BTST"
+
+    tomorrow = next_trading_day(today)
+    if tomorrow is None:
+        return False, "No next trading day found within 14 calendar days"
+
+    gap = trading_day_gap(today, tomorrow)
+    if gap != 0:
+        return False, f"Gap to next session is {gap} trading day(s), need exactly 1"
+
+    calendar_days = (tomorrow - today).days
+    if calendar_days > 1:
+        return False, f"Calendar gap to next session is {calendar_days} days (holiday/weekend)"
+
+    return True, f"Next session {tomorrow.isoformat()}"

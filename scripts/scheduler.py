@@ -19,7 +19,9 @@ STATE_FILE = Path("data/scheduler_state.json")
 POLL_SEC = 30
 RUN_WINDOW_MIN = 2
 PRE_MARKET_CHECK = (9, 10)
+BTST_EXIT_CHECK = (9, 13)
 MARKET_END = (16, 0)
+BTST_EXIT_JOB = "btst-exit"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -131,6 +133,20 @@ def launch_strategy(run_name: str) -> subprocess.Popen:
     return subprocess.Popen(cmd, cwd=PROJECT_ROOT)
 
 
+def launch_btst_exit() -> subprocess.Popen:
+    cmd = ["uv", "run", "run-btst-exit"]
+    print(f"Launching: {' '.join(cmd)}")
+    return subprocess.Popen(cmd, cwd=PROJECT_ROOT)
+
+
+def btst_exit_due(now: datetime) -> bool:
+    state = _load_state()
+    launched = state.get("launched", {})
+    if launched.get(BTST_EXIT_JOB) == now.date().isoformat():
+        return False
+    return is_due(f"{BTST_EXIT_CHECK[0]:02d}:{BTST_EXIT_CHECK[1]:02d}", now, launched.get(BTST_EXIT_JOB))
+
+
 def _seconds_until(dt: datetime) -> int:
     now = datetime.now(IST)
     return max(int((dt - now).total_seconds()), POLL_SEC)
@@ -198,6 +214,9 @@ def run_scheduler_loop() -> None:
                 for run in due_runs(runs, now):
                     mark_launched(run.name, now)
                     launch_strategy(run.name)
+                if btst_exit_due(now):
+                    mark_launched(BTST_EXIT_JOB, now)
+                    launch_btst_exit()
         except Exception as exc:
             print(f"Scheduler error: {exc}", file=sys.stderr)
 

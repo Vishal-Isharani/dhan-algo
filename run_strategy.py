@@ -17,7 +17,7 @@ from scripts.order_monitor import monitor_super_order
 from scripts.strategy_loader import load_strategy_runs
 from scripts.telegram_alert import alert_failure, alert_success
 from scripts.trade_journal import log_trade_failed, log_trade_open, update_trade_exit
-from strategies.base import StrategyRun
+from strategies.base import StrategyRun, StrategySkipped
 from strategies.registry import get_strategy
 
 
@@ -38,6 +38,9 @@ def execute_strategy_run(dhan, run: StrategyRun, *, skip_wait: bool = False) -> 
 
     try:
         prepared = strategy.prepare(dhan, run.config, skip_wait=skip_wait)
+    except StrategySkipped as exc:
+        print(f"[{label}] Skipped: {exc}")
+        return 0
     except Exception as exc:
         msg = f"[{label}] Strategy failed: {exc}"
         print(msg, file=sys.stderr)

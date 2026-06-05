@@ -7,6 +7,10 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+class StrategySkipped(Exception):
+    """Raised when entry conditions fail and strategy should skip without error."""
+
+
 @dataclass
 class PreparedOrder:
     trading_symbol: str

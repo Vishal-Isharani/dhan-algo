@@ -9,6 +9,11 @@ import requests
 
 NSE_HOME_URL = "https://www.nseindia.com"
 NSE_VARIATIONS_URL = "https://www.nseindia.com/api/live-analysis-variations"
+NSE_ALL_INDICES_URL = "https://www.nseindia.com/api/allIndices"
+NSE_INDICES_REFERER = "https://www.nseindia.com/market-data/live-market-indices"
+
+NIFTY_INDEX_NAME = "NIFTY 50"
+VIX_INDEX_NAME = "INDIA VIX"
 
 MoverDirection = Literal["gainers", "loosers"]
 FOSEC_SEGMENT = "FOSec"
@@ -85,3 +90,52 @@ class NSEClient:
                 f"NSE returned {len(movers)} F&O securities"
             )
         return movers[rank - 1]
+
+    def _fetch_all_indices(self) -> list[dict]:
+        self._session.headers["Referer"] = NSE_INDICES_REFERER
+        self._ensure_session()
+        response = self._session.get(NSE_ALL_INDICES_URL, timeout=self.timeout)
+        response.raise_for_status()
+        payload = response.json()
+        data = payload.get("data")
+        if not isinstance(data, list):
+            raise ValueError("NSE allIndices response missing data list")
+        return data
+
+    def get_index_quote(self, index_name: str) -> dict:
+        """Return live/index quote fields for a named NSE index."""
+
+        for row in self._fetch_all_indices():
+            if str(row.get("index", "")).upper() == index_name.upper():
+                last = float(row["last"])
+                prev = float(row["previousClose"])
+                pct = row.get("percentChange")
+                if pct is None and prev:
+                    pct = round(((last - prev) / prev) * 100, 2)
+                return {
+                    "index": row["index"],
+                    "last": last,
+                    "previous_close": prev,
+                    "percent_change": float(pct),
+                    "open": float(row.get("open") or 0),
+                    "high": float(row.get("high") or 0),
+                    "low": float(row.get("low") or 0),
+                    "indicative_close": float(row.get("indicativeClose") or 0),
+                }
+        raise ValueError(f"Index '{index_name}' not found in NSE allIndices")
+
+    def get_nifty_quote(self) -> dict:
+        return self.get_index_quote(NIFTY_INDEX_NAME)
+
+    def get_india_vix(self) -> float:
+        return self.get_index_quote(VIX_INDEX_NAME)["last"]
+
+    def get_nifty_preopen_change_pct(self) -> float:
+        """Pre-open indicative move vs previous close (use around 09:08–09:13 IST)."""
+
+        quote = self.get_nifty_quote()
+        prev = quote["previous_close"]
+        if prev <= 0:
+            raise ValueError("Invalid Nifty previous close from NSE")
+        indicative = quote["indicative_close"] or quote["last"]
+        return round(((indicative - prev) / prev) * 100, 2)

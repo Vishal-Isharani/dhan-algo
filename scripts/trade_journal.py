@@ -307,6 +307,28 @@ def update_trade_exit(
         conn.commit()
 
 
+def get_open_trades(
+    *,
+    strategy_name: str | None = None,
+    strategy_type: str | None = None,
+) -> list[dict]:
+    """Return trades still marked open."""
+
+    query = "SELECT * FROM trades WHERE status = 'open'"
+    params: list = []
+    if strategy_name:
+        query += " AND strategy_name = ?"
+        params.append(strategy_name)
+    if strategy_type:
+        query += " AND strategy_type = ?"
+        params.append(strategy_type)
+    query += " ORDER BY id ASC"
+
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+
 def list_trades(
     *,
     strategy_name: str | None = None,
