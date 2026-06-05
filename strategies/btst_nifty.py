@@ -24,7 +24,7 @@ class BtstNiftyStrategy(BaseStrategy):
             run_at=raw.get("run_at"),
         )
 
-    def prepare(self, dhan_client, config: BtstNiftyConfig) -> PreparedOrder:
+    def prepare(self, dhan_client, config: BtstNiftyConfig, *, skip_wait: bool = False) -> PreparedOrder:
         raise NotImplementedError("btst_nifty strategy is not implemented yet")
 
     def format_summary(self, order: PreparedOrder, config: BtstNiftyConfig) -> str:

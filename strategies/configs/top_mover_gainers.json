@@ -3,11 +3,11 @@
   "rank": 1,
   "lots": 1,
   "product": "INTRADAY",
-  "order_type": "LIMIT",
+  "order_type": "MARKET",
   "expiry": null,
-  "run_at": "09:20",
-  "target_pct": 25,
-  "stop_loss_pct": 15,
-  "trailing_jump": 0,
+  "run_at": "09:18:00",
+  "target_pct": 40,
+  "stop_loss_pct": 20,
+  "trailing_jump": 5,
   "monitor_poll_sec": 30
 }

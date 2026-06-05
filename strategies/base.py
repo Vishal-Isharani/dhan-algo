@@ -44,7 +44,7 @@ class BaseStrategy(ABC):
         """Parse a strategy-specific config file."""
 
     @abstractmethod
-    def prepare(self, dhan_client, config: Any) -> PreparedOrder:
+    def prepare(self, dhan_client, config: Any, *, skip_wait: bool = False) -> PreparedOrder:
         """Build the order from market data."""
 
     @abstractmethod

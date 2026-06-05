@@ -1,0 +1,23 @@
+[Unit]
+Description=Dhan Algo Strategy Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dhan
+Group=dhan
+WorkingDirectory=/opt/dhan-algo
+ExecStart=/home/dhan/.local/bin/uv run run-scheduler
+Restart=always
+RestartSec=15
+
+# Ensure uv and system tools are on PATH
+Environment=PATH=/home/dhan/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Asia/Kolkata
+
+StandardOutput=append:/opt/dhan-algo/data/scheduler.log
+StandardError=append:/opt/dhan-algo/data/scheduler.log
+
+[Install]
+WantedBy=multi-user.target

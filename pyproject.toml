@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 run-strategies = "run_strategy:cli"
+run-scheduler = "run_scheduler:cli"
 top-mover-strategy = "run_strategy:cli"
 trade-report = "trade_report:cli"
 
@@ -20,7 +21,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["run_strategy", "trade_report"]
+py-modules = ["run_strategy", "run_scheduler", "trade_report"]
 
 [tool.setuptools.packages.find]
 where = ["."]

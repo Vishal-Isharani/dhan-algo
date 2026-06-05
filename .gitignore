@@ -5,4 +5,5 @@ __pycache__/
 .env
 .cache/
 data/
+!data/.gitkeep
 security_id_list.csv

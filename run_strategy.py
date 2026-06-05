@@ -1,14 +1,10 @@
 """Run one or more trading strategies on Dhan.
 
-Setup:
-    cp .env.example .env
-    cp strategies/manifest.example.json strategies/manifest.json
+Local testing (Mac):
+    uv run run-strategies --now top-mover-gainers
 
-Usage:
-    uv sync
-    uv run run-strategies
+Production (VPS uses run-scheduler instead — see run_scheduler.py):
     uv run run-strategies top-mover-gainers
-    uv run trade-report
 """
 
 from __future__ import annotations
@@ -35,13 +31,13 @@ def _extract_order_data(response: dict) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def execute_strategy_run(dhan, run: StrategyRun) -> int:
+def execute_strategy_run(dhan, run: StrategyRun, *, skip_wait: bool = False) -> int:
     strategy = get_strategy(run.strategy_type)
     label = f"{run.name} ({run.strategy_type})"
     print(f"\n--- Running {label} ---")
 
     try:
-        prepared = strategy.prepare(dhan, run.config)
+        prepared = strategy.prepare(dhan, run.config, skip_wait=skip_wait)
     except Exception as exc:
         msg = f"[{label}] Strategy failed: {exc}"
         print(msg, file=sys.stderr)
@@ -143,6 +139,10 @@ def execute_strategy_run(dhan, run: StrategyRun) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = list(argv or sys.argv[1:])
+    skip_wait = False
+    if "--now" in args:
+        skip_wait = True
+        args.remove("--now")
     instance_names = args or None
 
     try:
@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = 0
     for run in runs:
-        if execute_strategy_run(dhan, run) != 0:
+        if execute_strategy_run(dhan, run, skip_wait=skip_wait) != 0:
             failures += 1
 
     if failures:

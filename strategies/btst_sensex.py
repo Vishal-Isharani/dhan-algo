@@ -24,7 +24,7 @@ class BtstSensexStrategy(BaseStrategy):
             run_at=raw.get("run_at"),
         )
 
-    def prepare(self, dhan_client, config: BtstSensexConfig) -> PreparedOrder:
+    def prepare(self, dhan_client, config: BtstSensexConfig, *, skip_wait: bool = False) -> PreparedOrder:
         raise NotImplementedError("btst_sensex strategy is not implemented yet")
 
     def format_summary(self, order: PreparedOrder, config: BtstSensexConfig) -> str:

@@ -78,8 +78,9 @@ class TopMoverOptionsStrategy(BaseStrategy):
             monitor_poll_sec=int(raw.get("monitor_poll_sec", 30)),
         )
 
-    def prepare(self, dhan_client, config: TopMoverConfig) -> PreparedOrder:
-        wait_until_run_time(config.run_at)
+    def prepare(self, dhan_client, config: TopMoverConfig, *, skip_wait: bool = False) -> PreparedOrder:
+        if not skip_wait:
+            wait_until_run_time(config.run_at)
 
         nse = NSEClient()
         mover = nse.get_top_mover(config.direction, rank=config.rank)
@@ -134,7 +135,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
         if not lot_size:
             raise ValueError(f"Could not resolve lot size for {mover.symbol}")
 
-        entry_price = float(option_ltp)
+        entry_price = round(float(option_ltp) * 1.015, 1)  # 1.5% buffer
         target_price, stop_loss_price = calc_exit_prices(
             entry_price,
             target_pct=config.target_pct,
