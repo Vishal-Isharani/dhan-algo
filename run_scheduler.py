@@ -1,16 +1,14 @@
 """Production scheduler for VPS.
 
-Flow each trading day:
-    1. At 09:10 IST — check NSE trading day (weekday + not holiday)
-    2. If trading day — arm all enabled strategies
-    3. Each strategy runs at its own run_at from config (e.g. 09:15)
+Event-driven (no 30s polling). Each trading day (IST):
+    1. Wake at 09:10 — confirm NSE trading day
+    2. Wake at each strategy run_at from config
+    3. Wake at 09:13 for BTST exits
+    4. Sleep after 15:30 until next trading morning
 
-VPS:
-    uv run run-scheduler
-    uv run run-scheduler --list
-
-Mac (testing):
-    uv run run-strategies --now top-mover-gainers
+VPS / Docker:
+    run-scheduler
+    run-scheduler --list
 """
 
 from __future__ import annotations

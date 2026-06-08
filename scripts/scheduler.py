@@ -6,7 +6,7 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -17,11 +17,11 @@ from strategies.common import parse_run_time
 
 IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path("data/scheduler_state.json")
-POLL_SEC = 30
 RUN_WINDOW_MIN = 2
+RETRY_INTERVAL_SEC = 60
 PRE_MARKET_CHECK = (9, 10)
 BTST_EXIT_CHECK = (9, 13)
-MARKET_END = (16, 0)
+MARKET_END = (15, 30)
 BTST_EXIT_JOB = "btst-exit"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,14 +41,41 @@ def get_run_at(run: StrategyRun) -> str | None:
     return getattr(run.config, "run_at", None)
 
 
-def _minutes_since_midnight(hour: int, minute: int) -> int:
-    return hour * 60 + minute
+def _at_time(day: date, hour: int, minute: int) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, minute, 0, tzinfo=IST)
 
 
-def _is_past_pre_market_check(now: datetime) -> bool:
-    check_mins = _minutes_since_midnight(*PRE_MARKET_CHECK)
-    now_mins = _minutes_since_midnight(now.hour, now.minute)
-    return now_mins >= check_mins
+def _run_at_on(day: date, run_at: str) -> datetime:
+    hour, minute = parse_run_time(run_at)
+    return _at_time(day, hour, minute)
+
+
+def _market_end_on(day: date) -> datetime:
+    return _at_time(day, *MARKET_END)
+
+
+def _pre_market_on(day: date) -> datetime:
+    return _at_time(day, *PRE_MARKET_CHECK)
+
+
+def _next_morning(day: date) -> datetime:
+    candidate = day + timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate += timedelta(days=1)
+    return _pre_market_on(candidate)
+
+
+def _launched_on(name: str, day: date) -> bool:
+    launched = _load_state().get("launched", {})
+    return launched.get(name) == day.isoformat()
+
+
+def mark_launched(run_name: str, now: datetime) -> None:
+    state = _load_state()
+    launched = state.get("launched", {})
+    launched[run_name] = now.date().isoformat()
+    state["launched"] = launched
+    _save_state(state)
 
 
 def _day_state_for(now: datetime) -> dict:
@@ -71,7 +98,7 @@ def _update_day_state(now: datetime, *, checked: bool, is_trading: bool | None) 
 
 
 def confirm_trading_day(now: datetime | None = None) -> bool | None:
-    """Check once per day before 9:15 whether today is a trading day."""
+    """Check once per day at/after 09:10 whether today is a trading day."""
 
     now = now or datetime.now(IST)
     day_state = _day_state_for(now)
@@ -79,7 +106,7 @@ def confirm_trading_day(now: datetime | None = None) -> bool | None:
     if day_state.get("checked"):
         return day_state.get("is_trading_day")
 
-    if not _is_past_pre_market_check(now):
+    if now < _pre_market_on(now.date()):
         return None
 
     trading = is_trading_day(now.date())
@@ -94,38 +121,61 @@ def confirm_trading_day(now: datetime | None = None) -> bool | None:
     return trading
 
 
-def is_due(run_at: str, now: datetime, last_run_date: str | None) -> bool:
-    today = now.date().isoformat()
-    if last_run_date == today:
-        return False
+def _pending_jobs(runs: list[StrategyRun], day: date) -> list[tuple[datetime, str, str]]:
+    """Return sorted (scheduled_time, job_type, name) not yet run today."""
 
-    hour, minute = parse_run_time(run_at)
-    now_mins = _minutes_since_midnight(now.hour, now.minute)
-    run_mins = _minutes_since_midnight(hour, minute)
-    return run_mins <= now_mins < run_mins + RUN_WINDOW_MIN
+    jobs: list[tuple[datetime, str, str]] = []
+    market_end = _market_end_on(day)
 
-
-def due_runs(runs: list[StrategyRun], now: datetime) -> list[StrategyRun]:
-    state = _load_state()
-    launched = state.get("launched", {})
-    due: list[StrategyRun] = []
+    btst_time = _at_time(day, *BTST_EXIT_CHECK)
+    if btst_time <= market_end and not _launched_on(BTST_EXIT_JOB, day):
+        jobs.append((btst_time, "btst_exit", BTST_EXIT_JOB))
 
     for run in runs:
         run_at = get_run_at(run)
         if not run_at:
             continue
-        if is_due(run_at, now, launched.get(run.name)):
-            due.append(run)
+        scheduled = _run_at_on(day, run_at)
+        if scheduled > market_end:
+            continue
+        if not _launched_on(run.name, day):
+            jobs.append((scheduled, "strategy", run.name))
 
-    return due
+    jobs.sort(key=lambda item: item[0])
+    return jobs
 
 
-def mark_launched(run_name: str, now: datetime) -> None:
-    state = _load_state()
-    launched = state.get("launched", {})
-    launched[run_name] = now.date().isoformat()
-    state["launched"] = launched
-    _save_state(state)
+def _next_wake(now: datetime, runs: list[StrategyRun]) -> datetime:
+    """Return the exact next datetime the scheduler should wake up."""
+
+    today = now.date()
+    market_end = _market_end_on(today)
+
+    if now >= market_end:
+        wake = _next_morning(today)
+        print(f"Market closed ({MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST). Sleeping until {wake:%Y-%m-%d %H:%M} IST.")
+        return wake
+
+    pre_market = _pre_market_on(today)
+    if now < pre_market:
+        return pre_market
+
+    trading = confirm_trading_day(now)
+    if trading is None:
+        return pre_market
+
+    if not trading:
+        return _next_morning(today)
+
+    pending = _pending_jobs(runs, today)
+    if not pending:
+        return market_end
+
+    scheduled, _, _ = pending[0]
+    if scheduled <= now:
+        return now
+
+    return scheduled
 
 
 def launch_strategy(run_name: str) -> int:
@@ -140,106 +190,83 @@ def launch_btst_exit() -> int:
     return subprocess.run(cmd, cwd=PROJECT_ROOT).returncode
 
 
-def btst_exit_due(now: datetime) -> bool:
-    state = _load_state()
-    launched = state.get("launched", {})
-    if launched.get(BTST_EXIT_JOB) == now.date().isoformat():
-        return False
-    return is_due(f"{BTST_EXIT_CHECK[0]:02d}:{BTST_EXIT_CHECK[1]:02d}", now, launched.get(BTST_EXIT_JOB))
+def _sleep_until(target: datetime) -> None:
+    seconds = int((target - datetime.now(IST)).total_seconds())
+    if seconds > 0:
+        print(f"Sleeping until {target:%Y-%m-%d %H:%M} IST ({seconds}s)")
+        time.sleep(seconds)
 
 
-def _seconds_until(dt: datetime) -> int:
-    now = datetime.now(IST)
-    return max(int((dt - now).total_seconds()), POLL_SEC)
+def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> bool:
+    """Run jobs scheduled for now. Return True if a failed job should retry soon."""
 
+    retry = False
+    for scheduled, job_type, name in _pending_jobs(runs, now.date()):
+        if scheduled > now:
+            break
 
-def seconds_until_next_check(now: datetime | None = None) -> int:
-    now = now or datetime.now(IST)
+        if job_type == "btst_exit":
+            print(f"Running BTST exit at {now:%H:%M} IST")
+            exit_code = launch_btst_exit()
+            if exit_code == 0:
+                mark_launched(name, now)
+            else:
+                print(f"BTST exit failed (exit {exit_code})", file=sys.stderr)
+                retry = True
+            continue
 
-    if not _is_past_pre_market_check(now):
-        target = now.replace(
-            hour=PRE_MARKET_CHECK[0],
-            minute=PRE_MARKET_CHECK[1],
-            second=0,
-            microsecond=0,
-        )
-        return _seconds_until(target)
+        print(f"Running {name} at {now:%H:%M} IST (scheduled {scheduled:%H:%M})")
+        exit_code = launch_strategy(name)
+        if exit_code == 0:
+            mark_launched(name, now)
+        else:
+            window_end = scheduled + timedelta(minutes=RUN_WINDOW_MIN)
+            if now < window_end:
+                print(
+                    f"{name} failed (exit {exit_code}) — retry in {RETRY_INTERVAL_SEC}s "
+                    f"until {window_end:%H:%M} IST",
+                    file=sys.stderr,
+                )
+                retry = True
+            else:
+                print(f"{name} failed (exit {exit_code}) — retry window closed", file=sys.stderr)
 
-    day_state = _day_state_for(now)
-    if not day_state.get("checked"):
-        return POLL_SEC
-
-    if not day_state.get("is_trading_day"):
-        tomorrow = now.date() + timedelta(days=1)
-        while True:
-            next_start = datetime(
-                tomorrow.year,
-                tomorrow.month,
-                tomorrow.day,
-                PRE_MARKET_CHECK[0],
-                PRE_MARKET_CHECK[1],
-                tzinfo=IST,
-            )
-            if tomorrow.weekday() < 5:
-                break
-            tomorrow += timedelta(days=1)
-        return _seconds_until(next_start)
-
-    if (now.hour, now.minute) >= MARKET_END:
-        tomorrow = now.date() + timedelta(days=1)
-        next_start = datetime(
-            tomorrow.year,
-            tomorrow.month,
-            tomorrow.day,
-            PRE_MARKET_CHECK[0],
-            PRE_MARKET_CHECK[1],
-            tzinfo=IST,
-        )
-        return _seconds_until(next_start)
-
-    return POLL_SEC
+    return retry
 
 
 def run_scheduler_loop() -> None:
-    print("Scheduler started (IST). For VPS production use.")
-    print(f"Pre-market trading day check at {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d}")
-    print("On trading days, each strategy runs at its own run_at time.")
+    print("Scheduler started (IST). Event-driven — no polling during market hours.")
+    print(f"Pre-market check: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
+    print(f"Market close sleep: {MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST")
     print(f"State file: {STATE_FILE}")
 
     while True:
         now = datetime.now(IST)
         try:
-            trading = confirm_trading_day(now)
-            if trading:
-                runs = load_strategy_runs()
-                for run in due_runs(runs, now):
-                    exit_code = launch_strategy(run.name)
-                    if exit_code == 0:
-                        mark_launched(run.name, now)
-                    else:
-                        print(
-                            f"{run.name} exited with code {exit_code} — "
-                            "not marked done, may retry within run window",
-                            file=sys.stderr,
-                        )
-                if btst_exit_due(now):
-                    exit_code = launch_btst_exit()
-                    if exit_code == 0:
-                        mark_launched(BTST_EXIT_JOB, now)
+            runs = load_strategy_runs()
+            next_wake = _next_wake(now, runs)
+
+            if next_wake > now:
+                _sleep_until(next_wake)
+                continue
+
+            if _run_due_jobs(datetime.now(IST), runs):
+                _sleep_until(datetime.now(IST) + timedelta(seconds=RETRY_INTERVAL_SEC))
         except Exception as exc:
             print(f"Scheduler error: {exc}", file=sys.stderr)
-
-        sleep_for = seconds_until_next_check(now)
-        print(f"Next check in {sleep_for}s ({now.strftime('%Y-%m-%d %H:%M')} IST)")
-        time.sleep(sleep_for)
+            time.sleep(RETRY_INTERVAL_SEC)
 
 
 def preview_schedule() -> None:
     runs = load_strategy_runs()
     today = datetime.now(IST).date()
     print(f"Today ({today.isoformat()}): trading day = {is_trading_day(today)}")
-    print(f"Pre-market check time: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
+    print(f"Pre-market check: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
+    print(f"Market close sleep: {MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST")
     print("Scheduled strategy instances:")
     for run in runs:
         run_at = get_run_at(run) or "manual only"
         print(f"  {run.name} ({run.strategy_type}) -> {run_at} IST")
+    print(f"BTST exit job -> {BTST_EXIT_CHECK[0]:02d}:{BTST_EXIT_CHECK[1]:02d} IST")
+    wake = _next_wake(datetime.now(IST), runs)
+    print(f"Next wake: {wake:%Y-%m-%d %H:%M} IST")

@@ -136,13 +136,20 @@ Replace `<your-dokploy-project>` with your Dokploy compose project name (e.g. `o
 
 ## Scheduler behaviour (production)
 
+Event-driven — sleeps until the next job, not polling every 30 seconds.
+
 Each trading day (IST):
 
 | Time | Action |
 |------|--------|
-| 09:10 | Confirm NSE trading day (weekday + not holiday) |
-| Per strategy | Launch enabled instances at `run_at` from config |
-| 09:13 | Launch BTST exit job for open `btst_nifty` positions |
+| 09:10 | Wake — confirm NSE trading day (weekday + not holiday) |
+| 09:13 | Wake — BTST exit job (if open `btst_nifty` positions) |
+| Per strategy | Wake at each enabled instance's `run_at` from config |
+| 15:30 | Sleep until next trading morning (09:10) |
+
+On holidays/weekends the scheduler sleeps from 09:10 until the next weekday morning.
+
+Failed strategy runs retry every 60s within a 2-minute window after the scheduled time.
 
 State is stored in `data/scheduler_state.json`. Trades are logged to `data/trades.db`.
 
