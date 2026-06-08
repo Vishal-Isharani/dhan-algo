@@ -1,0 +1,12 @@
+{
+  "lots": 1,
+  "run_at": "15:20",
+  "min_day_change_pct": 0.5,
+  "max_vix": 18,
+  "preopen_confirm_pct": 0.2,
+  "exit_check_at": "09:13",
+  "exit_early_at": "09:15",
+  "exit_late_at": "09:20",
+  "product": "MARGIN",
+  "order_type": "MARKET"
+}

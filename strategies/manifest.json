@@ -16,7 +16,7 @@
       "name": "btst-nifty",
       "type": "btst_nifty",
       "config": "btst_nifty.json",
-      "enabled": false
+      "enabled": true
     },
     {
       "name": "btst-sensex",
