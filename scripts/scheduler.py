@@ -128,16 +128,16 @@ def mark_launched(run_name: str, now: datetime) -> None:
     _save_state(state)
 
 
-def launch_strategy(run_name: str) -> subprocess.Popen:
-    cmd = ["uv", "run", "run-strategies", run_name]
+def launch_strategy(run_name: str) -> int:
+    cmd = ["run-strategies", run_name]
     print(f"Launching: {' '.join(cmd)}")
-    return subprocess.Popen(cmd, cwd=PROJECT_ROOT)
+    return subprocess.run(cmd, cwd=PROJECT_ROOT).returncode
 
 
-def launch_btst_exit() -> subprocess.Popen:
-    cmd = ["uv", "run", "run-btst-exit"]
+def launch_btst_exit() -> int:
+    cmd = ["run-btst-exit"]
     print(f"Launching: {' '.join(cmd)}")
-    return subprocess.Popen(cmd, cwd=PROJECT_ROOT)
+    return subprocess.run(cmd, cwd=PROJECT_ROOT).returncode
 
 
 def btst_exit_due(now: datetime) -> bool:
@@ -213,11 +213,19 @@ def run_scheduler_loop() -> None:
             if trading:
                 runs = load_strategy_runs()
                 for run in due_runs(runs, now):
-                    mark_launched(run.name, now)
-                    launch_strategy(run.name)
+                    exit_code = launch_strategy(run.name)
+                    if exit_code == 0:
+                        mark_launched(run.name, now)
+                    else:
+                        print(
+                            f"{run.name} exited with code {exit_code} — "
+                            "not marked done, may retry within run window",
+                            file=sys.stderr,
+                        )
                 if btst_exit_due(now):
-                    mark_launched(BTST_EXIT_JOB, now)
-                    launch_btst_exit()
+                    exit_code = launch_btst_exit()
+                    if exit_code == 0:
+                        mark_launched(BTST_EXIT_JOB, now)
         except Exception as exc:
             print(f"Scheduler error: {exc}", file=sys.stderr)
 

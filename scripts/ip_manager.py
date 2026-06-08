@@ -95,8 +95,10 @@ def ensure_ip_whitelisted() -> bool:
     public_ip = get_public_ip()
     status = _get_ip_status(client_id, access_token)
 
-    if status.get("ordersAllowed") and status.get("ipMatchStatus") == "MATCH":
-        print(f"IP OK: {status.get('detectedIP', public_ip)}")
+    if status.get("ordersAllowed"):
+        detected = status.get("detectedIP", public_ip)
+        match = status.get("ipMatchStatus", "OK")
+        print(f"IP OK: {detected} ({match})")
         return True
 
     ip_to_whitelist = status.get("detectedIP") or public_ip
