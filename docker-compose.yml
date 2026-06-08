@@ -1,0 +1,46 @@
+# Dokploy: create a Compose service (type Docker Compose, not Stack).
+# Compose path: ./docker-compose.yml
+# Set these in Dokploy Environment tab (written to .env automatically):
+#   DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+#
+# No domain/Traefik needed — background scheduler only.
+# Edit persisted files after first deploy via Dokploy terminal or Volume Backups:
+#   /app/data/manifest.json
+#   /app/strategies/configs/*.json
+
+services:
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Kolkata
+      DHAN_CLIENT_ID: ${DHAN_CLIENT_ID}
+      DHAN_ACCESS_TOKEN: ${DHAN_ACCESS_TOKEN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - dhan_algo_data:/app/data
+      - dhan_algo_cache:/app/.cache
+      - dhan_algo_configs:/app/strategies/configs
+    command: ["run-scheduler"]
+    healthcheck:
+      test: ["CMD", "run-scheduler", "--list"]
+      interval: 120s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  dhan_algo_data:
+  dhan_algo_cache:
+  dhan_algo_configs:

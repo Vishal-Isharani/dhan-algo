@@ -1,0 +1,28 @@
+{
+  "strategies": [
+    {
+      "name": "top-mover-gainers",
+      "type": "top_mover_options",
+      "config": "top_mover_gainers.json",
+      "enabled": false
+    },
+    {
+      "name": "top-mover-loosers",
+      "type": "top_mover_options",
+      "config": "top_mover_loosers.json",
+      "enabled": true
+    },
+    {
+      "name": "btst-nifty",
+      "type": "btst_nifty",
+      "config": "btst_nifty.json",
+      "enabled": false
+    },
+    {
+      "name": "btst-sensex",
+      "type": "btst_sensex",
+      "config": "btst_sensex.json",
+      "enabled": false
+    }
+  ]
+}
