@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from scripts.strategy_loader import load_strategy_runs
 from scripts.trading_calendar import is_trading_day
 from strategies.base import StrategyRun
+from strategies.common import parse_run_time
 
 IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path("data/scheduler_state.json")
@@ -98,7 +99,7 @@ def is_due(run_at: str, now: datetime, last_run_date: str | None) -> bool:
     if last_run_date == today:
         return False
 
-    hour, minute = map(int, run_at.split(":"))
+    hour, minute = parse_run_time(run_at)
     now_mins = _minutes_since_midnight(now.hour, now.minute)
     run_mins = _minutes_since_midnight(hour, minute)
     return run_mins <= now_mins < run_mins + RUN_WINDOW_MIN

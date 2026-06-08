@@ -9,11 +9,23 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 
 
+def parse_run_time(run_at: str) -> tuple[int, int]:
+    """Parse HH:MM or HH:MM:SS into hour and minute."""
+
+    parts = run_at.strip().split(":")
+    if len(parts) < 2:
+        raise ValueError(f"Invalid run_at time '{run_at}'; expected HH:MM or HH:MM:SS")
+    hour, minute = int(parts[0]), int(parts[1])
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError(f"Invalid run_at time '{run_at}'")
+    return hour, minute
+
+
 def wait_until_run_time(run_at: str | None) -> None:
     if not run_at:
         return
 
-    hour, minute = map(int, run_at.split(":"))
+    hour, minute = parse_run_time(run_at)
     now = datetime.now(IST)
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if now >= target:

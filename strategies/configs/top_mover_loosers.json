@@ -5,7 +5,7 @@
   "product": "INTRADAY",
   "order_type": "MARKET",
   "expiry": null,
-  "run_at": "09:18:00",
+  "run_at": "09:18",
   "target_pct": 40,
   "stop_loss_pct": 20,
   "trailing_jump": 7,
