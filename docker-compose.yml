@@ -1,11 +1,6 @@
-# Dokploy: create a Compose service (type Docker Compose, not Stack).
-# Compose path: ./docker-compose.yml
-# Set these in Dokploy Environment tab (written to .env automatically):
-#   DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-#
-# No domain/Traefik needed — background scheduler only.
-# manifest.json + strategies/configs/*.json: edit in git, redeploy — synced each start.
-# Set SYNC_*_FROM_REPO=0 only if you edit files on the VPS and want to keep those changes.
+# Dokploy: Compose type Docker Compose (not Stack). Compose path: ./docker-compose.yml
+# Set DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN (+ optional Telegram vars) in Environment tab.
+# manifest.json + strategies/configs/*.json come from git on each deploy — edit locally, commit, redeploy.
 
 services:
   scheduler:
@@ -19,8 +14,6 @@ services:
       - .env
     environment:
       TZ: Asia/Kolkata
-      SYNC_MANIFEST_FROM_REPO: ${SYNC_MANIFEST_FROM_REPO:-1}
-      SYNC_STRATEGY_CONFIGS_FROM_REPO: ${SYNC_STRATEGY_CONFIGS_FROM_REPO:-1}
       DHAN_CLIENT_ID: ${DHAN_CLIENT_ID}
       DHAN_ACCESS_TOKEN: ${DHAN_ACCESS_TOKEN}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -28,7 +21,6 @@ services:
     volumes:
       - dhan_algo_data:/app/data
       - dhan_algo_cache:/app/.cache
-      - dhan_algo_configs:/app/strategies/configs
     command: ["run-scheduler"]
     healthcheck:
       test: ["CMD", "run-scheduler", "--list"]
@@ -44,4 +36,3 @@ networks:
 volumes:
   dhan_algo_data:
   dhan_algo_cache:
-  dhan_algo_configs:

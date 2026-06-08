@@ -22,14 +22,6 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY . .
 RUN uv sync --frozen --no-dev
 
-# Repo configs baked into image; entrypoint syncs them into the configs volume on start.
-RUN mkdir -p /app/config.defaults \
-    && if [ -f strategies/manifest.json ]; then cp strategies/manifest.json /app/config.defaults/manifest.json; else cp strategies/manifest.example.json /app/config.defaults/manifest.json; fi \
-    && for f in strategies/configs/*.json; do case "$$f" in *.example.json) ;; *) cp "$$f" /app/config.defaults/ ;; esac; done
-
 ENV PATH="/app/.venv/bin:${PATH}"
 
-RUN chmod +x /app/docker-entrypoint.sh
-
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["run-scheduler"]
