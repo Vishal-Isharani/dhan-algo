@@ -24,7 +24,7 @@ RUN uv sync --frozen --no-dev
 
 # Defaults copied into persistent volumes on first Dokploy/container start.
 RUN mkdir -p /app/config.defaults \
-    && cp strategies/manifest.example.json /app/config.defaults/manifest.json \
+    && if [ -f strategies/manifest.json ]; then cp strategies/manifest.json /app/config.defaults/manifest.json; else cp strategies/manifest.example.json /app/config.defaults/manifest.json; fi \
     && cp strategies/configs/*.json /app/config.defaults/
 
 ENV PATH="/app/.venv/bin:${PATH}"

@@ -4,9 +4,9 @@
 #   DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 #
 # No domain/Traefik needed — background scheduler only.
-# Edit persisted files after first deploy via Dokploy terminal or Volume Backups:
-#   /app/data/manifest.json
-#   /app/strategies/configs/*.json
+# manifest.json: edit in git, redeploy — synced to volume each start (SYNC_MANIFEST_FROM_REPO=1).
+# Strategy configs live in dhan_algo_configs volume; set SYNC_STRATEGY_CONFIGS_FROM_REPO=1 to sync from git.
+# Runtime-only edits: /app/data/manifest.json (set SYNC_MANIFEST_FROM_REPO=0 to keep them).
 
 services:
   scheduler:
@@ -20,6 +20,8 @@ services:
       - .env
     environment:
       TZ: Asia/Kolkata
+      SYNC_MANIFEST_FROM_REPO: ${SYNC_MANIFEST_FROM_REPO:-1}
+      SYNC_STRATEGY_CONFIGS_FROM_REPO: ${SYNC_STRATEGY_CONFIGS_FROM_REPO:-0}
       DHAN_CLIENT_ID: ${DHAN_CLIENT_ID}
       DHAN_ACCESS_TOKEN: ${DHAN_ACCESS_TOKEN}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
