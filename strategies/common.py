@@ -36,12 +36,25 @@ def wait_until_run_time(run_at: str | None) -> None:
     time.sleep(seconds)
 
 
+def round_to_tick(price: float, tick_size: float) -> float:
+    if tick_size <= 0:
+        return round(price, 2)
+    return round(round(price / tick_size) * tick_size, 2)
+
+
 def calc_exit_prices(
     entry: float,
     *,
     target_pct: float | None,
     stop_loss_pct: float | None,
+    tick_size: float = 0.05,
 ) -> tuple[float | None, float | None]:
-    target = round(entry * (1 + target_pct / 100), 2) if target_pct is not None else None
-    stop_loss = round(entry * (1 - stop_loss_pct / 100), 2) if stop_loss_pct is not None else None
+    target = round_to_tick(entry * (1 + target_pct / 100), tick_size) if target_pct is not None else None
+    stop_loss = round_to_tick(entry * (1 - stop_loss_pct / 100), tick_size) if stop_loss_pct is not None else None
     return target, stop_loss
+
+
+def order_api_price(order_type: str, estimated_price: float) -> float:
+    """Dhan MARKET orders require price=0."""
+
+    return 0.0 if order_type.upper() == "MARKET" else estimated_price

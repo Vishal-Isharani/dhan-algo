@@ -14,12 +14,13 @@ from scripts.dhan_helpers import (
     find_atm_row,
     get_lot_size,
     parse_expiry_list,
+    resolve_derivative,
     resolve_symbol,
 )
 from scripts.nse_client import NSEClient, NSEMover
 from scripts.validate_order import validate_order
 from strategies.base import BaseStrategy, PreparedOrder
-from strategies.common import calc_exit_prices, wait_until_run_time
+from strategies.common import calc_exit_prices, order_api_price, round_to_tick, wait_until_run_time
 
 OptionSide = Literal["CE", "PE"]
 MoverDirection = Literal["gainers", "loosers"]
@@ -135,11 +136,25 @@ class TopMoverOptionsStrategy(BaseStrategy):
         if not lot_size:
             raise ValueError(f"Could not resolve lot size for {mover.symbol}")
 
-        entry_price = round(float(option_ltp) * 1.015, 1)  # 1.5% buffer
+        contract = resolve_derivative(
+            mover.symbol,
+            strike=float(atm["strike"]),
+            option_type=option_side,
+            expiry=expiry,
+        )
+        tick_size = float(contract["tick_size"]) if contract else 0.05
+
+        option_ltp_f = float(option_ltp)
+        if config.order_type.upper() == "MARKET":
+            entry_price = round_to_tick(option_ltp_f, tick_size)
+        else:
+            entry_price = round_to_tick(option_ltp_f * 1.015, tick_size)
+
         target_price, stop_loss_price = calc_exit_prices(
             entry_price,
             target_pct=config.target_pct,
             stop_loss_pct=config.stop_loss_pct,
+            tick_size=tick_size,
         )
 
         return PreparedOrder(
@@ -178,7 +193,8 @@ class TopMoverOptionsStrategy(BaseStrategy):
             f"ATM Strike:   {extra.get('atm_strike', 0):,.2f}",
             f"Option:       {extra.get('option_side')} (buy only)",
             f"Contract ID:  {order.security_id}",
-            f"Entry:        Rs. {order.entry_price:,.2f}",
+            f"Entry:        {config.order_type} @ Rs. {order.entry_price:,.2f}"
+            + (" (est. for margin)" if config.order_type.upper() == "MARKET" else ""),
             f"Lots:         {config.lots} x {order.lot_size} = {order.quantity} qty",
         ]
         if order.target_price is not None:
@@ -191,6 +207,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
         return "\n".join(lines)
 
     def place_order(self, dhan_client, order: PreparedOrder, config: TopMoverConfig) -> dict:
+        api_price = order_api_price(config.order_type, order.entry_price)
         validation = validate_order(
             security_id=order.security_id,
             exchange_segment=dhanhq.NSE_FNO,
@@ -198,7 +215,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
             quantity=order.quantity,
             order_type=config.order_type,
             product_type=config.product,
-            price=order.entry_price,
+            price=api_price or order.entry_price,
             trading_symbol=order.trading_symbol,
             lot_size=order.lot_size,
         )
@@ -229,7 +246,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
                 quantity=order.quantity,
                 order_type=config.order_type,
                 product_type=config.product,
-                price=order.entry_price,
+                price=api_price,
                 targetPrice=order.target_price or 0.0,
                 stopLossPrice=order.stop_loss_price or 0.0,
                 trailingJump=order.trailing_jump,
@@ -243,7 +260,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
             quantity=order.quantity,
             order_type=config.order_type,
             product_type=config.product,
-            price=order.entry_price,
+            price=api_price,
             validity=dhanhq.DAY,
             tag=tag,
         )
