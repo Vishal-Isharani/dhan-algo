@@ -3,7 +3,7 @@
   "rank": 1,
   "lots": 1,
   "product": "INTRADAY",
-  "order_type": "MARKET",
+  "order_type": "LIMIT",
   "expiry": null,
   "run_at": "09:18",
   "target_pct": 40,

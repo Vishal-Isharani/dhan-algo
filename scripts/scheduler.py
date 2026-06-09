@@ -17,8 +17,6 @@ from strategies.common import parse_run_time
 
 IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path("data/scheduler_state.json")
-RUN_WINDOW_MIN = 2
-RETRY_INTERVAL_SEC = 60
 PRE_MARKET_CHECK = (9, 10)
 BTST_EXIT_CHECK = (9, 13)
 MARKET_END = (15, 30)
@@ -70,7 +68,9 @@ def _launched_on(name: str, day: date) -> bool:
     return launched.get(name) == day.isoformat()
 
 
-def mark_launched(run_name: str, now: datetime) -> None:
+def mark_attempted(run_name: str, now: datetime) -> None:
+    """Record that a scheduled job ran today — success or failure, no retries."""
+
     state = _load_state()
     launched = state.get("launched", {})
     launched[run_name] = now.date().isoformat()
@@ -197,10 +197,9 @@ def _sleep_until(target: datetime) -> None:
         time.sleep(seconds)
 
 
-def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> bool:
-    """Run jobs scheduled for now. Return True if a failed job should retry soon."""
+def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> None:
+    """Run jobs scheduled for now. Each job runs at most once per day."""
 
-    retry = False
     for scheduled, job_type, name in _pending_jobs(runs, now.date()):
         if scheduled > now:
             break
@@ -208,30 +207,16 @@ def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> bool:
         if job_type == "btst_exit":
             print(f"Running BTST exit at {now:%H:%M} IST")
             exit_code = launch_btst_exit()
-            if exit_code == 0:
-                mark_launched(name, now)
-            else:
-                print(f"BTST exit failed (exit {exit_code})", file=sys.stderr)
-                retry = True
+            if exit_code != 0:
+                print(f"BTST exit failed (exit {exit_code}) — not retrying today", file=sys.stderr)
+            mark_attempted(name, now)
             continue
 
         print(f"Running {name} at {now:%H:%M} IST (scheduled {scheduled:%H:%M})")
         exit_code = launch_strategy(name)
-        if exit_code == 0:
-            mark_launched(name, now)
-        else:
-            window_end = scheduled + timedelta(minutes=RUN_WINDOW_MIN)
-            if now < window_end:
-                print(
-                    f"{name} failed (exit {exit_code}) — retry in {RETRY_INTERVAL_SEC}s "
-                    f"until {window_end:%H:%M} IST",
-                    file=sys.stderr,
-                )
-                retry = True
-            else:
-                print(f"{name} failed (exit {exit_code}) — retry window closed", file=sys.stderr)
-
-    return retry
+        if exit_code != 0:
+            print(f"{name} failed (exit {exit_code}) — not retrying today", file=sys.stderr)
+        mark_attempted(name, now)
 
 
 def run_scheduler_loop() -> None:
@@ -250,11 +235,10 @@ def run_scheduler_loop() -> None:
                 _sleep_until(next_wake)
                 continue
 
-            if _run_due_jobs(datetime.now(IST), runs):
-                _sleep_until(datetime.now(IST) + timedelta(seconds=RETRY_INTERVAL_SEC))
+            _run_due_jobs(datetime.now(IST), runs)
         except Exception as exc:
             print(f"Scheduler error: {exc}", file=sys.stderr)
-            time.sleep(RETRY_INTERVAL_SEC)
+            time.sleep(60)
 
 
 def preview_schedule() -> None:

@@ -145,10 +145,11 @@ class TopMoverOptionsStrategy(BaseStrategy):
         tick_size = float(contract["tick_size"]) if contract else 0.05
 
         option_ltp_f = float(option_ltp)
-        if config.order_type.upper() == "MARKET":
-            entry_price = round_to_tick(option_ltp_f, tick_size)
-        else:
+        # Super orders need LIMIT entry with price > 0 — Dhan SDK rejects MARKET/price=0.
+        if self.uses_super_order(config) or config.order_type.upper() != "MARKET":
             entry_price = round_to_tick(option_ltp_f * 1.015, tick_size)
+        else:
+            entry_price = round_to_tick(option_ltp_f, tick_size)
 
         target_price, stop_loss_price = calc_exit_prices(
             entry_price,
@@ -180,8 +181,19 @@ class TopMoverOptionsStrategy(BaseStrategy):
             },
         )
 
+    def _placement_params(self, config: TopMoverConfig, order: PreparedOrder) -> tuple[str, float]:
+        if self.uses_super_order(config):
+            return "LIMIT", order.entry_price
+        return config.order_type, order_api_price(config.order_type, order.entry_price)
+
     def format_summary(self, order: PreparedOrder, config: TopMoverConfig) -> str:
         extra = order.extra
+        order_type, _ = self._placement_params(config, order)
+        entry_note = ""
+        if self.uses_super_order(config) and config.order_type.upper() == "MARKET":
+            entry_note = " (config MARKET — super order uses LIMIT entry)"
+        elif config.order_type.upper() == "MARKET":
+            entry_note = " (est. for margin)"
         lines = [
             "=== Top Mover Options Strategy ===",
             f"Instance:     {config.name}",
@@ -193,8 +205,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
             f"ATM Strike:   {extra.get('atm_strike', 0):,.2f}",
             f"Option:       {extra.get('option_side')} (buy only)",
             f"Contract ID:  {order.security_id}",
-            f"Entry:        {config.order_type} @ Rs. {order.entry_price:,.2f}"
-            + (" (est. for margin)" if config.order_type.upper() == "MARKET" else ""),
+            f"Entry:        {order_type} @ Rs. {order.entry_price:,.2f}{entry_note}",
             f"Lots:         {config.lots} x {order.lot_size} = {order.quantity} qty",
         ]
         if order.target_price is not None:
@@ -207,13 +218,13 @@ class TopMoverOptionsStrategy(BaseStrategy):
         return "\n".join(lines)
 
     def place_order(self, dhan_client, order: PreparedOrder, config: TopMoverConfig) -> dict:
-        api_price = order_api_price(config.order_type, order.entry_price)
+        order_type, api_price = self._placement_params(config, order)
         validation = validate_order(
             security_id=order.security_id,
             exchange_segment=dhanhq.NSE_FNO,
             transaction_type=dhanhq.BUY,
             quantity=order.quantity,
-            order_type=config.order_type,
+            order_type=order_type,
             product_type=config.product,
             price=api_price or order.entry_price,
             trading_symbol=order.trading_symbol,
@@ -244,7 +255,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
                 exchange_segment=dhanhq.NSE_FNO,
                 transaction_type=dhanhq.BUY,
                 quantity=order.quantity,
-                order_type=config.order_type,
+                order_type=order_type,
                 product_type=config.product,
                 price=api_price,
                 targetPrice=order.target_price or 0.0,
@@ -258,7 +269,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
             exchange_segment=dhanhq.NSE_FNO,
             transaction_type=dhanhq.BUY,
             quantity=order.quantity,
-            order_type=config.order_type,
+            order_type=order_type,
             product_type=config.product,
             price=api_price,
             validity=dhanhq.DAY,

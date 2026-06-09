@@ -149,7 +149,7 @@ Each trading day (IST):
 
 On holidays/weekends the scheduler sleeps from 09:10 until the next weekday morning.
 
-Failed strategy runs retry every 60s within a 2-minute window after the scheduled time.
+Failed runs are **not** retried — one attempt per strategy per day. Re-run manually with `run-strategies --now <name>` if needed.
 
 State is stored in `data/scheduler_state.json`. Trades are logged to `data/trades.db`.
 
