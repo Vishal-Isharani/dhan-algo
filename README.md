@@ -70,8 +70,11 @@ uv run run-scheduler --list
 # BTST next-morning exit (for open btst_nifty positions)
 uv run run-btst-exit --now
 
-# Trade history / P&L summary
-uv run trade-report
+# Trade history / P&L summary (sync with Dhan first if you closed manually)
+uv run trade-report --sync
+
+# Or reconcile open trades only
+uv run run-reconcile-trades
 ```
 
 ## Run on VPS (Dokploy)
@@ -150,6 +153,8 @@ Each trading day (IST):
 On holidays/weekends the scheduler sleeps from 09:10 until the next weekday morning.
 
 Failed runs are **not** retried — one attempt per strategy per day. Re-run manually with `run-strategies --now <name>` if needed.
+
+Each strategy runs only within **3 minutes** of its scheduled `run_at`. Redeploy/restart after that window will not catch up. If a trade was already logged today in `trades.db`, duplicate entry is blocked even if scheduler state was reset.
 
 State is stored in `data/scheduler_state.json`. Trades are logged to `data/trades.db`.
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -305,6 +305,21 @@ def update_trade_exit(
             ),
         )
         conn.commit()
+
+
+def already_traded_today(strategy_name: str, day: date | None = None) -> bool:
+    """True if a non-failed trade was logged for this strategy instance today."""
+
+    day = day or datetime.now(IST).date()
+    day_str = day.isoformat()
+    rows = list_trades(strategy_name=strategy_name, limit=20)
+    for row in rows:
+        created_at = str(row.get("created_at") or "")
+        if not created_at.startswith(day_str):
+            continue
+        if row.get("status") != "failed":
+            return True
+    return False
 
 
 def get_open_trades(

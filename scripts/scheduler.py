@@ -10,18 +10,23 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from scripts.dhan_helpers import get_client
 from scripts.strategy_loader import load_strategy_runs
+from scripts.trade_journal import already_traded_today
+from scripts.trade_reconcile import reconcile_open_trades
 from scripts.trading_calendar import is_trading_day
 from strategies.base import StrategyRun
 from strategies.common import parse_run_time
 
 IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path("data/scheduler_state.json")
+RUN_WINDOW_MIN = 3
 PRE_MARKET_CHECK = (9, 10)
 BTST_EXIT_CHECK = (9, 13)
 MARKET_END = (15, 30)
 BTST_EXIT_JOB = "btst-exit"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RECONCILE_INTERVAL_MIN = 5
+PROJECT_ROOT = Path(__file__).resolve().parent.parent)
 
 
 def _load_state() -> dict:
@@ -63,13 +68,21 @@ def _next_morning(day: date) -> datetime:
     return _pre_market_on(candidate)
 
 
+def _run_window_end(scheduled: datetime) -> datetime:
+    return scheduled + timedelta(minutes=RUN_WINDOW_MIN)
+
+
+def _in_run_window(scheduled: datetime, now: datetime) -> bool:
+    return scheduled <= now < _run_window_end(scheduled)
+
+
 def _launched_on(name: str, day: date) -> bool:
     launched = _load_state().get("launched", {})
     return launched.get(name) == day.isoformat()
 
 
 def mark_attempted(run_name: str, now: datetime) -> None:
-    """Record that a scheduled job ran today — success or failure, no retries."""
+    """Record that a scheduled job ran today — success, failure, missed, or skipped."""
 
     state = _load_state()
     launched = state.get("launched", {})
@@ -145,6 +158,22 @@ def _pending_jobs(runs: list[StrategyRun], day: date) -> list[tuple[datetime, st
     return jobs
 
 
+def _expire_missed_jobs(now: datetime, runs: list[StrategyRun]) -> None:
+    """Mark past-window jobs as done without running — prevents catch-up on redeploy."""
+
+    for scheduled, job_type, name in _pending_jobs(runs, now.date()):
+        if scheduled > now:
+            break
+        if _in_run_window(scheduled, now):
+            continue
+        label = "strategy" if job_type == "strategy" else name
+        print(
+            f"{label} missed run window (scheduled {scheduled:%H:%M}, "
+            f"window {RUN_WINDOW_MIN}m) — skipping catch-up",
+        )
+        mark_attempted(name, now)
+
+
 def _next_wake(now: datetime, runs: list[StrategyRun]) -> datetime:
     """Return the exact next datetime the scheduler should wake up."""
 
@@ -167,15 +196,23 @@ def _next_wake(now: datetime, runs: list[StrategyRun]) -> datetime:
     if not trading:
         return _next_morning(today)
 
+    _expire_missed_jobs(now, runs)
+
     pending = _pending_jobs(runs, today)
     if not pending:
+        reconcile_at = now + timedelta(minutes=RECONCILE_INTERVAL_MIN)
+        if reconcile_at < market_end:
+            return reconcile_at
         return market_end
 
     scheduled, _, _ = pending[0]
-    if scheduled <= now:
+    if _in_run_window(scheduled, now):
         return now
 
-    return scheduled
+    if scheduled > now:
+        return scheduled
+
+    return market_end
 
 
 def launch_strategy(run_name: str) -> int:
@@ -197,12 +234,57 @@ def _sleep_until(target: datetime) -> None:
         time.sleep(seconds)
 
 
+def _reconcile_open_trades(now: datetime) -> None:
+    """Sync journal open trades when positions were closed manually on Dhan."""
+
+    if now.weekday() >= 5:
+        return
+
+    pre_market = _pre_market_on(now.date())
+    market_end = _market_end_on(now.date())
+    if now < pre_market or now > market_end:
+        return
+
+    try:
+        dhan, _ = get_client()
+    except ValueError as exc:
+        print(f"Trade reconcile skipped: {exc}", file=sys.stderr)
+        return
+
+    try:
+        results = reconcile_open_trades(dhan)
+    except Exception as exc:
+        print(f"Trade reconcile failed: {exc}", file=sys.stderr)
+        return
+
+    if not results:
+        return
+
+    print(f"Reconciled {len(results)} manually closed trade(s):")
+    for row in results:
+        fill = row.get("exit_fill_price") or row.get("exit_price")
+        fill_text = f"Rs. {fill:,.2f}" if fill is not None else "unknown"
+        print(
+            f"  #{row['trade_id']} {row.get('trading_symbol')} "
+            f"-> {row['status']} ({row['exit_reason']}) exit={fill_text}",
+        )
+
+
 def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> None:
-    """Run jobs scheduled for now. Each job runs at most once per day."""
+    """Run jobs only inside their scheduled window. Each job once per day."""
+
+    _expire_missed_jobs(now, runs)
 
     for scheduled, job_type, name in _pending_jobs(runs, now.date()):
         if scheduled > now:
             break
+        if not _in_run_window(scheduled, now):
+            continue
+
+        if job_type == "strategy" and already_traded_today(name, now.date()):
+            print(f"{name} already traded today — skipping duplicate entry")
+            mark_attempted(name, now)
+            continue
 
         if job_type == "btst_exit":
             print(f"Running BTST exit at {now:%H:%M} IST")
@@ -222,6 +304,7 @@ def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> None:
 def run_scheduler_loop() -> None:
     print("Scheduler started (IST). Event-driven — no polling during market hours.")
     print(f"Pre-market check: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
+    print(f"Run window: {RUN_WINDOW_MIN} minutes after each scheduled time")
     print(f"Market close sleep: {MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST")
     print(f"State file: {STATE_FILE}")
 
@@ -235,7 +318,9 @@ def run_scheduler_loop() -> None:
                 _sleep_until(next_wake)
                 continue
 
-            _run_due_jobs(datetime.now(IST), runs)
+            now = datetime.now(IST)
+            _run_due_jobs(now, runs)
+            _reconcile_open_trades(now)
         except Exception as exc:
             print(f"Scheduler error: {exc}", file=sys.stderr)
             time.sleep(60)
@@ -246,6 +331,7 @@ def preview_schedule() -> None:
     today = datetime.now(IST).date()
     print(f"Today ({today.isoformat()}): trading day = {is_trading_day(today)}")
     print(f"Pre-market check: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
+    print(f"Run window: {RUN_WINDOW_MIN} minutes after scheduled time")
     print(f"Market close sleep: {MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST")
     print("Scheduled strategy instances:")
     for run in runs:

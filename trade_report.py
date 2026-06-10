@@ -6,7 +6,9 @@ import argparse
 import json
 import sys
 
+from scripts.dhan_helpers import get_client
 from scripts.trade_journal import export_trades_csv, list_trades, summary_stats
+from scripts.trade_reconcile import reconcile_open_trades
 
 
 def _format_trade(row: dict) -> str:
@@ -33,7 +35,29 @@ def main(argv: list[str] | None = None) -> int:
         metavar="PATH",
         help="Export all matching trades to CSV (e.g. data/trades_export.csv)",
     )
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Reconcile open trades with Dhan before showing the report",
+    )
     args = parser.parse_args(argv)
+
+    if args.sync:
+        try:
+            dhan, _ = get_client()
+            results = reconcile_open_trades(
+                dhan,
+                strategy_name=args.strategy,
+                strategy_type=args.strategy_type,
+            )
+            if results:
+                print(f"Synced {len(results)} trade(s) from Dhan.")
+            else:
+                print("No open trades needed syncing.")
+            print()
+        except ValueError as exc:
+            print(f"Sync skipped: {exc}", file=sys.stderr)
+            return 1
 
     if args.export_csv:
         count = export_trades_csv(

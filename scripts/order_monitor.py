@@ -319,6 +319,14 @@ def monitor_super_order(
                     planned_exit=prepared.stop_loss_price,
                 )
 
+            if entry_status in TRADED_STATUSES:
+                from scripts.trade_reconcile import is_position_closed, resolve_manual_exit
+
+                closed = is_position_closed(dhan_client, prepared.security_id)
+                if closed is True:
+                    print("Position closed at broker (manual or external exit).")
+                    return resolve_manual_exit(dhan_client, order_id, prepared)
+
         time.sleep(poll_sec)
 
     print("Market closed — recording EOD exit.")
