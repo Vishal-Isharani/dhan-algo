@@ -11,36 +11,118 @@ clear about what is raw Dhan payload and what is repo-defined convenience.
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pandas as pd
+import pyotp
 import requests
 from dhanhq import DhanContext, dhanhq
 from dotenv import load_dotenv
 
+IST = ZoneInfo("Asia/Kolkata")
+TOKEN_CACHE_FILE = Path(".cache/dhan_token.json")
+TOKEN_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
 SECURITY_MASTER_CACHE_DIR = Path(".cache")
 SECURITY_MASTER_CACHE_FILE = SECURITY_MASTER_CACHE_DIR / "security_master.csv"
 SECURITY_MASTER_CACHE_TTL_HOURS = 24
 SECURITY_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv"
 
 
-def get_client():
-    """Initialize a DhanHQ client using credentials from ``.env``."""
-
+def _dhan_credentials() -> tuple[str, str, str]:
     load_dotenv(".env")
 
     client_id = os.environ.get("DHAN_CLIENT_ID")
-    access_token = os.environ.get("DHAN_ACCESS_TOKEN")
+    pin = os.environ.get("DHAN_PIN")
+    totp_secret = os.environ.get("DHAN_TOTP_SECRET")
 
-    if not client_id or not access_token:
+    if not client_id or not pin or not totp_secret:
         raise ValueError(
             "Credentials not found. Copy .env.example to .env and set "
-            "DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN."
+            "DHAN_CLIENT_ID, DHAN_PIN, and DHAN_TOTP_SECRET."
         )
 
+    return client_id, pin, totp_secret
+
+
+def generate_access_token(
+    client_id: str | None = None,
+    pin: str | None = None,
+    totp_secret: str | None = None,
+) -> str:
+    """Generate a fresh Dhan access token via PIN + TOTP."""
+
+    if client_id is None or pin is None or totp_secret is None:
+        env_client_id, env_pin, env_totp_secret = _dhan_credentials()
+        client_id = client_id or env_client_id
+        pin = pin or env_pin
+        totp_secret = totp_secret or env_totp_secret
+
+    totp = pyotp.TOTP(totp_secret).now()
+    response = requests.post(
+        TOKEN_AUTH_URL,
+        params={"dhanClientId": client_id, "pin": pin, "totp": totp},
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if "accessToken" not in data:
+        raise ValueError(f"Token generation failed: {data}")
+    return data["accessToken"]
+
+
+def _load_token_cache() -> dict[str, str] | None:
+    if not TOKEN_CACHE_FILE.exists():
+        return None
+    return json.loads(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
+
+
+def _save_token_cache(access_token: str, refreshed_on: date) -> None:
+    TOKEN_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_CACHE_FILE.write_text(
+        json.dumps(
+            {"access_token": access_token, "refreshed_on": refreshed_on.isoformat()},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def get_access_token(*, force_refresh: bool = False) -> str:
+    """Return today's cached access token, generating one if needed."""
+
+    today = datetime.now(IST).date()
+    if not force_refresh:
+        cached = _load_token_cache()
+        if cached and cached.get("refreshed_on") == today.isoformat():
+            token = cached.get("access_token")
+            if token:
+                return token
+
+    access_token = generate_access_token()
+    _save_token_cache(access_token, today)
+    return access_token
+
+
+def refresh_access_token() -> str:
+    """Generate and persist a fresh access token for the current trading day."""
+
+    today = datetime.now(IST).date()
+    access_token = generate_access_token()
+    _save_token_cache(access_token, today)
+    return access_token
+
+
+def get_client():
+    """Initialize a DhanHQ client using a TOTP-refreshed access token."""
+
+    client_id, _, _ = _dhan_credentials()
+    access_token = get_access_token()
     context = DhanContext(client_id, access_token)
     return dhanhq(context), context
 

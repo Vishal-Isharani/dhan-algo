@@ -9,7 +9,7 @@ import requests
 from dhanhq import DhanLogin
 from dotenv import load_dotenv
 
-from scripts.dhan_helpers import unwrap_sdk_data
+from scripts.dhan_helpers import get_access_token, unwrap_sdk_data
 
 
 def get_public_ip() -> str:
@@ -88,9 +88,9 @@ def ensure_ip_whitelisted() -> bool:
 
     load_dotenv(".env")
     client_id = os.environ.get("DHAN_CLIENT_ID")
-    access_token = os.environ.get("DHAN_ACCESS_TOKEN")
-    if not client_id or not access_token:
-        raise ValueError("DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN must be set in .env")
+    if not client_id:
+        raise ValueError("DHAN_CLIENT_ID must be set in .env")
+    access_token = get_access_token()
 
     public_ip = get_public_ip()
     status = _get_ip_status(client_id, access_token)

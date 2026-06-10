@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from scripts.dhan_helpers import get_client
+from scripts.dhan_helpers import get_client, refresh_access_token
 from scripts.strategy_loader import load_strategy_runs
 from scripts.trade_journal import already_traded_today
 from scripts.trade_reconcile import reconcile_open_trades
@@ -21,6 +21,7 @@ from strategies.common import parse_run_time
 IST = ZoneInfo("Asia/Kolkata")
 STATE_FILE = Path("data/scheduler_state.json")
 RUN_WINDOW_MIN = 3
+TOKEN_REFRESH = (9, 0)
 PRE_MARKET_CHECK = (9, 10)
 BTST_EXIT_CHECK = (9, 13)
 MARKET_END = (15, 30)
@@ -61,11 +62,25 @@ def _pre_market_on(day: date) -> datetime:
     return _at_time(day, *PRE_MARKET_CHECK)
 
 
+def _token_refresh_on(day: date) -> datetime:
+    return _at_time(day, *TOKEN_REFRESH)
+
+
+def _token_refreshed_on(day: date) -> bool:
+    return _load_state().get("token_refreshed") == day.isoformat()
+
+
+def _mark_token_refreshed(now: datetime) -> None:
+    state = _load_state()
+    state["token_refreshed"] = now.date().isoformat()
+    _save_state(state)
+
+
 def _next_morning(day: date) -> datetime:
     candidate = day + timedelta(days=1)
     while candidate.weekday() >= 5:
         candidate += timedelta(days=1)
-    return _pre_market_on(candidate)
+    return _token_refresh_on(candidate)
 
 
 def _run_window_end(scheduled: datetime) -> datetime:
@@ -174,6 +189,24 @@ def _expire_missed_jobs(now: datetime, runs: list[StrategyRun]) -> None:
         mark_attempted(name, now)
 
 
+def _maybe_refresh_token(now: datetime) -> None:
+    """Refresh the Dhan access token once per trading day at/after 09:00 IST."""
+
+    if now < _token_refresh_on(now.date()):
+        return
+    if not is_trading_day(now.date()):
+        return
+    if _token_refreshed_on(now.date()):
+        return
+
+    try:
+        refresh_access_token()
+        print(f"Dhan access token refreshed at {now:%H:%M} IST")
+        _mark_token_refreshed(now)
+    except Exception as exc:
+        print(f"Token refresh failed: {exc}", file=sys.stderr)
+
+
 def _next_wake(now: datetime, runs: list[StrategyRun]) -> datetime:
     """Return the exact next datetime the scheduler should wake up."""
 
@@ -185,8 +218,17 @@ def _next_wake(now: datetime, runs: list[StrategyRun]) -> datetime:
         print(f"Market closed ({MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST). Sleeping until {wake:%Y-%m-%d %H:%M} IST.")
         return wake
 
+    token_refresh = _token_refresh_on(today)
     pre_market = _pre_market_on(today)
+
+    if now < token_refresh:
+        return token_refresh
+
     if now < pre_market:
+        if is_trading_day(today) and not _token_refreshed_on(today):
+            return now
+        if not is_trading_day(today):
+            return _next_morning(today)
         return pre_market
 
     trading = confirm_trading_day(now)
@@ -303,6 +345,7 @@ def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> None:
 
 def run_scheduler_loop() -> None:
     print("Scheduler started (IST). Event-driven — no polling during market hours.")
+    print(f"Token refresh: {TOKEN_REFRESH[0]:02d}:{TOKEN_REFRESH[1]:02d} IST on trading days")
     print(f"Pre-market check: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
     print(f"Run window: {RUN_WINDOW_MIN} minutes after each scheduled time")
     print(f"Market close sleep: {MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST")
@@ -319,6 +362,7 @@ def run_scheduler_loop() -> None:
                 continue
 
             now = datetime.now(IST)
+            _maybe_refresh_token(now)
             _run_due_jobs(now, runs)
             _reconcile_open_trades(now)
         except Exception as exc:
@@ -330,6 +374,7 @@ def preview_schedule() -> None:
     runs = load_strategy_runs()
     today = datetime.now(IST).date()
     print(f"Today ({today.isoformat()}): trading day = {is_trading_day(today)}")
+    print(f"Token refresh: {TOKEN_REFRESH[0]:02d}:{TOKEN_REFRESH[1]:02d} IST on trading days")
     print(f"Pre-market check: {PRE_MARKET_CHECK[0]:02d}:{PRE_MARKET_CHECK[1]:02d} IST")
     print(f"Run window: {RUN_WINDOW_MIN} minutes after scheduled time")
     print(f"Market close sleep: {MARKET_END[0]:02d}:{MARKET_END[1]:02d} IST")
