@@ -20,7 +20,12 @@ from scripts.dhan_helpers import (
 from scripts.nse_client import NSEClient, NSEMover
 from scripts.validate_order import validate_order
 from strategies.base import BaseStrategy, PreparedOrder
-from strategies.common import calc_exit_prices, order_api_price, round_to_tick, wait_until_run_time
+from strategies.common import (
+    calc_option_exit_from_underlying,
+    order_api_price,
+    round_to_tick,
+    wait_until_run_time,
+)
 
 OptionSide = Literal["CE", "PE"]
 MoverDirection = Literal["gainers", "loosers"]
@@ -151,10 +156,16 @@ class TopMoverOptionsStrategy(BaseStrategy):
         else:
             entry_price = round_to_tick(option_ltp_f, tick_size)
 
-        target_price, stop_loss_price = calc_exit_prices(
+        delta_key = f"{option_side.lower()}_delta"
+        option_delta = atm.get(delta_key)
+
+        target_price, stop_loss_price = calc_option_exit_from_underlying(
             entry_price,
-            target_pct=config.target_pct,
-            stop_loss_pct=config.stop_loss_pct,
+            spot,
+            float(option_delta) if option_delta is not None else None,
+            option_side,
+            target_underlying_pct=config.target_pct,
+            stop_underlying_pct=config.stop_loss_pct,
             tick_size=tick_size,
         )
 
@@ -178,6 +189,7 @@ class TopMoverOptionsStrategy(BaseStrategy):
                 "mover_change_pct": mover.per_change,
                 "mover_ltp": mover.ltp,
                 "direction": config.direction,
+                "option_delta": float(option_delta) if option_delta is not None else None,
             },
         )
 
@@ -208,10 +220,18 @@ class TopMoverOptionsStrategy(BaseStrategy):
             f"Entry:        {order_type} @ Rs. {order.entry_price:,.2f}{entry_note}",
             f"Lots:         {config.lots} x {order.lot_size} = {order.quantity} qty",
         ]
+        delta = extra.get("option_delta")
+        delta_text = f", δ={delta:.2f}" if delta is not None else ""
         if order.target_price is not None:
-            lines.append(f"Target:       Rs. {order.target_price:,.2f} ({config.target_pct}%)")
+            lines.append(
+                f"Target:       Rs. {order.target_price:,.2f} "
+                f"({config.target_pct}% underlying move{delta_text})"
+            )
         if order.stop_loss_price is not None:
-            lines.append(f"Stop Loss:    Rs. {order.stop_loss_price:,.2f} ({config.stop_loss_pct}%)")
+            lines.append(
+                f"Stop Loss:    Rs. {order.stop_loss_price:,.2f} "
+                f"({config.stop_loss_pct}% underlying move{delta_text})"
+            )
         if order.trailing_jump:
             lines.append(f"Trailing:     Rs. {order.trailing_jump:,.2f}")
         lines.append("==================================")

@@ -6,8 +6,8 @@
   "order_type": "LIMIT",
   "expiry": null,
   "run_at": "09:18",
-  "target_pct": 40,
-  "stop_loss_pct": 20,
+  "target_pct": 2,
+  "stop_loss_pct": 1,
   "trailing_jump": 7,
   "monitor_poll_sec": 30
 }
