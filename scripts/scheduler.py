@@ -26,7 +26,7 @@ BTST_EXIT_CHECK = (9, 13)
 MARKET_END = (15, 30)
 BTST_EXIT_JOB = "btst-exit"
 RECONCILE_INTERVAL_MIN = 5
-PROJECT_ROOT = Path(__file__).resolve().parent.parent)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_state() -> dict:
