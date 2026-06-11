@@ -28,6 +28,8 @@ from dotenv import load_dotenv
 IST = ZoneInfo("Asia/Kolkata")
 TOKEN_CACHE_FILE = Path(".cache/dhan_token.json")
 TOKEN_AUTH_URL = "https://auth.dhan.co/app/generateAccessToken"
+# Dhan access tokens can expire before market close — refresh if cache is older than this.
+TOKEN_MAX_AGE_HOURS = 5
 SECURITY_MASTER_CACHE_DIR = Path(".cache")
 SECURITY_MASTER_CACHE_FILE = SECURITY_MASTER_CACHE_DIR / "security_master.csv"
 SECURITY_MASTER_CACHE_TTL_HOURS = 24
@@ -82,39 +84,66 @@ def _load_token_cache() -> dict[str, str] | None:
     return json.loads(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
 
 
-def _save_token_cache(access_token: str, refreshed_on: date) -> None:
+def _save_token_cache(access_token: str, refreshed_at: datetime | None = None) -> None:
+    now = refreshed_at or datetime.now(IST)
     TOKEN_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     TOKEN_CACHE_FILE.write_text(
         json.dumps(
-            {"access_token": access_token, "refreshed_on": refreshed_on.isoformat()},
+            {
+                "access_token": access_token,
+                "refreshed_on": now.date().isoformat(),
+                "refreshed_at": now.isoformat(),
+            },
             indent=2,
         ),
         encoding="utf-8",
     )
 
 
+def is_invalid_token_error(exc: BaseException) -> bool:
+    return "invalid token" in str(exc).lower()
+
+
+def _cache_still_valid(cached: dict[str, str], today: date) -> bool:
+    if cached.get("refreshed_on") != today.isoformat():
+        return False
+    token = cached.get("access_token")
+    if not token:
+        return False
+
+    refreshed_at = cached.get("refreshed_at")
+    if refreshed_at:
+        try:
+            refreshed_dt = datetime.fromisoformat(refreshed_at)
+            if refreshed_dt.tzinfo is None:
+                refreshed_dt = refreshed_dt.replace(tzinfo=IST)
+            age_hours = (datetime.now(IST) - refreshed_dt).total_seconds() / 3600
+            if age_hours >= TOKEN_MAX_AGE_HOURS:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
 def get_access_token(*, force_refresh: bool = False) -> str:
-    """Return today's cached access token, generating one if needed."""
+    """Return a valid access token, generating one via PIN+TOTP when needed."""
 
     today = datetime.now(IST).date()
     if not force_refresh:
         cached = _load_token_cache()
-        if cached and cached.get("refreshed_on") == today.isoformat():
-            token = cached.get("access_token")
-            if token:
-                return token
+        if cached and _cache_still_valid(cached, today):
+            return cached["access_token"]
 
     access_token = generate_access_token()
-    _save_token_cache(access_token, today)
+    _save_token_cache(access_token)
     return access_token
 
 
 def refresh_access_token() -> str:
     """Generate and persist a fresh access token for the current trading day."""
 
-    today = datetime.now(IST).date()
     access_token = generate_access_token()
-    _save_token_cache(access_token, today)
+    _save_token_cache(access_token)
     return access_token
 
 

@@ -9,7 +9,7 @@ import requests
 from dhanhq import DhanLogin
 from dotenv import load_dotenv
 
-from scripts.dhan_helpers import get_access_token, unwrap_sdk_data
+from scripts.dhan_helpers import get_access_token, is_invalid_token_error, unwrap_sdk_data
 
 
 def get_public_ip() -> str:
@@ -90,10 +90,22 @@ def ensure_ip_whitelisted() -> bool:
     client_id = os.environ.get("DHAN_CLIENT_ID")
     if not client_id:
         raise ValueError("DHAN_CLIENT_ID must be set in .env")
-    access_token = get_access_token()
 
     public_ip = get_public_ip()
-    status = _get_ip_status(client_id, access_token)
+    status = None
+    for attempt, force_refresh in enumerate((False, True)):
+        access_token = get_access_token(force_refresh=force_refresh)
+        try:
+            status = _get_ip_status(client_id, access_token)
+            break
+        except ValueError as exc:
+            if is_invalid_token_error(exc) and attempt == 0:
+                print("Access token expired — refreshing via PIN+TOTP...")
+                continue
+            raise
+
+    if status is None:
+        return False
 
     if status.get("ordersAllowed"):
         detected = status.get("detectedIP", public_ip)
@@ -147,7 +159,7 @@ def ensure_ip_whitelisted() -> bool:
             print("Note: Dhan only allows IP changes once every 7 days.")
         return False
 
-    status = _get_ip_status(client_id, access_token)
+    status = _get_ip_status(client_id, get_access_token())
     if status.get("ordersAllowed"):
         print(f"IP OK: {status.get('detectedIP', ip_to_whitelist)}")
         return True
