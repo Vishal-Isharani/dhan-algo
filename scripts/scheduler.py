@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from scripts.dhan_helpers import get_client, refresh_access_token
+from scripts.dhan_helpers import get_access_token, get_client, refresh_access_token
 from scripts.strategy_loader import load_strategy_runs
 from scripts.trade_journal import already_traded_today
 from scripts.trade_reconcile import reconcile_open_trades
@@ -337,6 +337,10 @@ def _run_due_jobs(now: datetime, runs: list[StrategyRun]) -> None:
             continue
 
         print(f"Running {name} at {now:%H:%M} IST (scheduled {scheduled:%H:%M})")
+        try:
+            get_access_token()
+        except ValueError as exc:
+            print(f"Token refresh before {name} failed: {exc}", file=sys.stderr)
         exit_code = launch_strategy(name)
         if exit_code != 0:
             print(f"{name} failed (exit {exit_code}) — not retrying today", file=sys.stderr)

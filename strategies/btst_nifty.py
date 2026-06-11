@@ -109,11 +109,12 @@ class BtstNiftyStrategy(BaseStrategy):
         )
 
     def _fetch_last_twenty_min_closes(self, dhan_client, today: date) -> list[float]:
+        # At 15:20 the 15:15–15:20 bar is still forming — use completed bars through 15:15.
         start = datetime(today.year, today.month, today.day, 15, 0, tzinfo=IST)
-        end = datetime(today.year, today.month, today.day, 15, 20, tzinfo=IST)
+        end = datetime(today.year, today.month, today.day, 15, 15, tzinfo=IST)
         response = dhan_client.intraday_minute_data(
             security_id=str(NIFTY_SECURITY_ID),
-            exchange_segment=dhanhq.INDEX,
+            exchange_segment=NIFTY_UNDERLYING_SEGMENT,
             instrument_type="INDEX",
             from_date=start.strftime("%Y-%m-%d %H:%M:%S"),
             to_date=end.strftime("%Y-%m-%d %H:%M:%S"),
@@ -142,7 +143,7 @@ class BtstNiftyStrategy(BaseStrategy):
         ]
         if len(window) < 4:
             raise StrategySkipped(
-                f"Need 4 five-minute closes in 15:00–15:20 window, got {len(window)}"
+                f"Need 4 five-minute closes in 15:00–15:15 window, got {len(window)}"
             )
         return window[-4:]
 

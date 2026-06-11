@@ -173,6 +173,15 @@ def main(argv: list[str] | None = None) -> int:
         alert_failure(msg)
         return 1
 
+    # IP check may refresh the cached token — re-init client so orders use the same token.
+    try:
+        dhan, _ = get_client()
+    except ValueError as exc:
+        msg = f"Dhan credentials error after IP check: {exc}"
+        print(f"Error: {exc}", file=sys.stderr)
+        alert_failure(msg)
+        return 1
+
     failures = 0
     for run in runs:
         if execute_strategy_run(dhan, run, skip_wait=skip_wait) != 0:
