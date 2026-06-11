@@ -5,10 +5,12 @@ description = "NSE top-mover ATM options strategy via Dhan"
 requires-python = ">=3.10"
 dependencies = [
     "dhanhq>=2.0.0",
+    "fastapi>=0.115.0",
     "pandas>=2.0.0",
     "pyotp>=2.9.0",
     "python-dotenv>=1.0.0",
     "requests>=2.31.0",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [project.scripts]
@@ -16,6 +18,7 @@ run-strategies = "run_strategy:cli"
 run-scheduler = "run_scheduler:cli"
 run-btst-exit = "run_btst_exit:cli"
 run-reconcile-trades = "run_reconcile_trades:cli"
+run-dashboard = "run_dashboard:cli"
 top-mover-strategy = "run_strategy:cli"
 trade-report = "trade_report:cli"
 
@@ -24,8 +27,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["run_strategy", "run_scheduler", "run_btst_exit", "run_reconcile_trades", "trade_report"]
+py-modules = ["run_strategy", "run_scheduler", "run_btst_exit", "run_reconcile_trades", "run_dashboard", "trade_report"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["scripts*", "strategies*"]
+include = ["scripts*", "strategies*", "dashboard*"]

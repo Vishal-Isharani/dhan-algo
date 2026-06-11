@@ -1,6 +1,6 @@
 # Dokploy: Compose type Docker Compose (not Stack). Compose path: ./docker-compose.yml
 # Set DHAN_CLIENT_ID, DHAN_PIN, DHAN_TOTP_SECRET (+ optional Telegram vars) in Environment tab.
-# manifest.json + strategies/configs/*.json come from git on each deploy — edit locally, commit, redeploy.
+# Strategy configs are edited via the dashboard (data/strategy_config volume) — no redeploy needed.
 
 services:
   scheduler:
@@ -29,6 +29,33 @@ services:
       timeout: 30s
       retries: 3
       start_period: 60s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Kolkata
+      DASHBOARD_API_KEY: ${DASHBOARD_API_KEY:-}
+      DHAN_CLIENT_ID: ${DHAN_CLIENT_ID}
+      DHAN_PIN: ${DHAN_PIN}
+      DHAN_TOTP_SECRET: ${DHAN_TOTP_SECRET}
+    volumes:
+      - dhan_algo_data:/app/data
+    command: ["run-dashboard", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health')"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   dokploy-network:

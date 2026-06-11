@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dhan-algo Dashboard</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #151a23;
+      --surface2: #1c2330;
+      --border: #2a3344;
+      --text: #e8edf5;
+      --muted: #8b95a8;
+      --accent: #3b82f6;
+      --accent-dim: #2563eb33;
+      --green: #22c55e;
+      --green-dim: #22c55e22;
+      --red: #ef4444;
+      --red-dim: #ef444422;
+      --amber: #f59e0b;
+      --radius: 10px;
+      --font: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SF Mono", "Fira Code", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    header h1 span { color: var(--muted); font-weight: 400; }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .badge.live { color: var(--green); border-color: #22c55e44; background: var(--green-dim); }
+
+    nav {
+      display: flex;
+      gap: 0.25rem;
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    nav button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+
+    nav button:hover { color: var(--text); background: var(--surface2); }
+    nav button.active { color: var(--text); background: var(--accent-dim); color: var(--accent); }
+
+    main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+    }
+
+    .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 1.5rem; font-weight: 600; margin-top: 0.25rem; }
+    .stat-card .value.positive { color: var(--green); }
+    .stat-card .value.negative { color: var(--red); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h2 { font-size: 0.95rem; font-weight: 600; }
+
+    .card-body { padding: 1.25rem; }
+
+    .strategy-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      gap: 1rem;
+    }
+
+    .strategy-row:last-child { border-bottom: none; }
+
+    .strategy-info h3 { font-size: 0.95rem; font-weight: 600; }
+    .strategy-info .meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.15rem; }
+
+    .strategy-actions { display: flex; align-items: center; gap: 0.75rem; }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle.on { background: var(--accent); border-color: var(--accent); }
+
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle.on::after { transform: translateX(20px); }
+
+    button.btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    button.btn:hover { border-color: var(--accent); color: var(--accent); }
+    button.btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+    button.btn.primary:hover { background: #2563eb; }
+
+    .config-editor {
+      display: none;
+      padding: 1rem 1.25rem;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+
+    .config-editor.open { display: block; }
+
+    textarea.config-json {
+      width: 100%;
+      min-height: 220px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    .config-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      align-items: center;
+    }
+
+    .error-text { color: var(--red); font-size: 0.8rem; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th { color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: none; }
+
+    .pnl-pos { color: var(--green); }
+    .pnl-neg { color: var(--red); }
+
+    .status-pill {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    .status-pill.target { color: var(--green); border-color: #22c55e44; }
+    .status-pill.stop_loss { color: var(--red); border-color: #ef444444; }
+    .status-pill.open { color: var(--amber); border-color: #f59e0b44; }
+
+    .toolbar {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    select, input[type="text"] {
+      font-family: inherit;
+      font-size: 0.82rem;
+      padding: 0.4rem 0.7rem;
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #00000088;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      width: min(400px, 90vw);
+    }
+
+    .modal h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+    .modal p { font-size: 0.85rem; color: var(--muted); margin-bottom: 1rem; }
+    .modal input { width: 100%; margin-bottom: 1rem; }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+      z-index: 200;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.25s;
+      pointer-events: none;
+    }
+
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { border-color: var(--red); color: var(--red); }
+    .toast.success { border-color: var(--green); color: var(--green); }
+
+    .schedule-list { list-style: none; }
+    .schedule-list li {
+      padding: 0.5rem 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .schedule-list li:last-child { border-bottom: none; }
+    .schedule-list strong { color: var(--text); }
+
+    @media (max-width: 640px) {
+      .strategy-row { flex-direction: column; align-items: flex-start; }
+      .strategy-actions { width: 100%; justify-content: space-between; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>dhan-algo <span>dashboard</span></h1>
+    <div class="header-right">
+      <span class="badge" id="trading-badge">—</span>
+      <button class="btn" id="settings-btn" title="API key">⚙</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="active" data-panel="overview">Overview</button>
+    <button data-panel="strategies">Strategies</button>
+    <button data-panel="reports">Reports</button>
+  </nav>
+
+  <main>
+    <section class="panel active" id="panel-overview">
+      <div class="stats-grid" id="overview-stats"></div>
+      <div class="card">
+        <div class="card-header"><h2>Scheduler</h2></div>
+        <div class="card-body">
+          <ul class="schedule-list" id="schedule-list"></ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h2>Open Positions</h2>
+          <button class="btn" id="sync-overview-btn">Sync with Dhan</button>
+        </div>
+        <div class="card-body" id="open-trades"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-strategies">
+      <p style="color:var(--muted);font-size:0.85rem;margin-bottom:1rem;">
+        Toggle strategies on/off and edit configs. Changes save to <code>data/strategy_config/</code> — no redeploy needed.
+      </p>
+      <div class="card" id="strategies-list"></div>
+    </section>
+
+    <section class="panel" id="panel-reports">
+      <div class="toolbar">
+        <select id="filter-strategy"><option value="">All strategies</option></select>
+        <button class="btn" id="sync-reports-btn">Sync with Dhan</button>
+        <button class="btn primary" id="export-btn">Export CSV</button>
+        <button class="btn" id="refresh-reports">Refresh</button>
+      </div>
+      <div class="stats-grid" id="report-stats"></div>
+      <div class="card">
+        <div class="card-header"><h2>Trade History</h2></div>
+        <div class="card-body" style="padding:0;overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Strategy</th>
+                <th>Symbol</th>
+                <th>Status</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>PnL</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="trades-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal">
+      <h2>API Key</h2>
+      <p>Set the same value as <code>DASHBOARD_API_KEY</code> in your environment. Stored in browser localStorage.</p>
+      <input type="password" id="api-key-input" placeholder="Dashboard API key" />
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn primary" id="save-key-btn">Save</button>
+        <button class="btn" id="close-modal-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API_KEY_STORAGE = "dhan_algo_dashboard_api_key";
+
+    function getApiKey() {
+      return localStorage.getItem(API_KEY_STORAGE) || "";
+    }
+
+    async function api(path, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      const key = getApiKey();
+      if (key) headers["X-API-Key"] = key;
+      if (options.body && typeof options.body === "object") {
+        headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(options.body);
+      }
+      const res = await fetch(path, { ...options, headers });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+      const ct = res.headers.get("content-type") || "";
+      if (ct.includes("application/json")) return res.json();
+      return res;
+    }
+
+    function toast(msg, type = "success") {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.className = `toast show ${type}`;
+      setTimeout(() => el.classList.remove("show"), 3000);
+    }
+
+    function fmtPnl(v) {
+      if (v == null) return "—";
+      const n = Number(v);
+      const cls = n >= 0 ? "pnl-pos" : "pnl-neg";
+      return `<span class="${cls}">₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>`;
+    }
+
+    function fmtPrice(v) {
+      return v != null ? Number(v).toFixed(2) : "—";
+    }
+
+    function statCard(label, value, cls = "") {
+      return `<div class="stat-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
+    }
+
+    // Navigation
+    document.querySelectorAll("nav button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(`panel-${btn.dataset.panel}`).classList.add("active");
+        if (btn.dataset.panel === "reports") loadReports();
+        if (btn.dataset.panel === "strategies") loadStrategies();
+      });
+    });
+
+    // Settings modal
+    document.getElementById("settings-btn").addEventListener("click", () => {
+      document.getElementById("api-key-input").value = getApiKey();
+      document.getElementById("settings-modal").classList.add("open");
+    });
+    document.getElementById("close-modal-btn").addEventListener("click", () => {
+      document.getElementById("settings-modal").classList.remove("open");
+    });
+    document.getElementById("save-key-btn").addEventListener("click", () => {
+      localStorage.setItem(API_KEY_STORAGE, document.getElementById("api-key-input").value.trim());
+      document.getElementById("settings-modal").classList.remove("open");
+      toast("API key saved");
+      refreshAll();
+    });
+
+    async function loadOverview() {
+      const [summary, open, sched] = await Promise.all([
+        api("/api/reports/summary"),
+        api("/api/reports/open"),
+        api("/api/scheduler/status"),
+      ]);
+
+      const pnlCls = (summary.total_pnl || 0) >= 0 ? "positive" : "negative";
+      document.getElementById("overview-stats").innerHTML = [
+        statCard("Total Trades", summary.total_trades || 0),
+        statCard("Closed", summary.closed_trades || 0),
+        statCard("Targets", summary.targets || 0),
+        statCard("Stop Losses", summary.stop_losses || 0),
+        statCard("Total PnL", `₹${Number(summary.total_pnl || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, pnlCls),
+        statCard("Open", open.count),
+      ].join("");
+
+      const badge = document.getElementById("trading-badge");
+      badge.textContent = sched.is_trading_day ? "Trading day" : "Non-trading day";
+      badge.classList.toggle("live", sched.is_trading_day);
+
+      const schedHtml = sched.all_strategies.map(s => {
+        const status = s.enabled ? `<span style="color:var(--green)">enabled</span>` : `<span style="color:var(--muted)">disabled</span>`;
+        const time = s.run_at ? ` @ ${s.run_at} IST` : "";
+        return `<li><strong>${s.name}</strong> (${s.type}) — ${status}${time}</li>`;
+      }).join("") || "<li>No strategies configured</li>";
+      document.getElementById("schedule-list").innerHTML = schedHtml;
+
+      if (!open.trades.length) {
+        document.getElementById("open-trades").innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No open positions.</p>';
+      } else {
+        document.getElementById("open-trades").innerHTML = `<table>
+          <thead><tr><th>Strategy</th><th>Symbol</th><th>Entry</th><th>Qty</th></tr></thead>
+          <tbody>${open.trades.map(t => `<tr>
+            <td>${t.strategy_name}</td>
+            <td>${t.trading_symbol || t.symbol || "—"}</td>
+            <td>${fmtPrice(t.entry_fill_price || t.entry_price)}</td>
+            <td>${t.quantity || "—"}</td>
+          </tr>`).join("")}</tbody></table>`;
+      }
+    }
+
+    async function loadStrategies() {
+      const { strategies } = await api("/api/strategies");
+      const container = document.getElementById("strategies-list");
+      container.innerHTML = strategies.map(s => {
+        const runAt = s.config?.run_at ? `runs at ${s.config.run_at} IST` : "manual trigger";
+        const errBadge = s.valid ? "" : `<span class="error-text"> — ${s.error}</span>`;
+        return `<div class="strategy-item" data-name="${s.name}">
+          <div class="strategy-row">
+            <div class="strategy-info">
+              <h3>${s.name}</h3>
+              <div class="meta">${s.type} · ${runAt}${errBadge}</div>
+            </div>
+            <div class="strategy-actions">
+              <div class="toggle ${s.enabled ? "on" : ""}" data-name="${s.name}" data-enabled="${s.enabled}"></div>
+              <button class="btn edit-config-btn" data-name="${s.name}">Edit config</button>
+            </div>
+          </div>
+          <div class="config-editor" id="editor-${s.name}">
+            <textarea class="config-json">${JSON.stringify(s.config || {}, null, 2)}</textarea>
+            <div class="config-actions">
+              <button class="btn primary save-config-btn" data-name="${s.name}">Save</button>
+              <span class="error-text save-error"></span>
+            </div>
+          </div>
+        </div>`;
+      }).join("");
+
+      container.querySelectorAll(".toggle").forEach(el => {
+        el.addEventListener("click", async () => {
+          const name = el.dataset.name;
+          const newEnabled = el.dataset.enabled !== "true";
+          try {
+            await api(`/api/strategies/${name}`, { method: "PATCH", body: { enabled: newEnabled } });
+            el.classList.toggle("on", newEnabled);
+            el.dataset.enabled = String(newEnabled);
+            toast(`${name} ${newEnabled ? "enabled" : "disabled"}`);
+          } catch (e) {
+            toast(e.message, "error");
+          }
+        });
+      });
+
+      container.querySelectorAll(".edit-config-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const editor = document.getElementById(`editor-${btn.dataset.name}`);
+          editor.classList.toggle("open");
+        });
+      });
+
+      container.querySelectorAll(".save-config-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const name = btn.dataset.name;
+          const editor = document.getElementById(`editor-${name}`);
+          const textarea = editor.querySelector("textarea");
+          const errEl = editor.querySelector(".save-error");
+          errEl.textContent = "";
+          let config;
+          try {
+            config = JSON.parse(textarea.value);
+          } catch {
+            errEl.textContent = "Invalid JSON";
+            return;
+          }
+          try {
+            await api(`/api/strategies/${name}/config`, { method: "PUT", body: { config } });
+            toast(`${name} config saved`);
+            loadStrategies();
+          } catch (e) {
+            errEl.textContent = e.message;
+          }
+        });
+      });
+    }
+
+    async function loadReports() {
+      const strategy = document.getElementById("filter-strategy").value;
+      const params = new URLSearchParams();
+      if (strategy) params.set("strategy", strategy);
+      const qs = params.toString() ? `?${params}` : "";
+
+      const [summary, trades] = await Promise.all([
+        api(`/api/reports/summary${qs}`),
+        api(`/api/reports/trades${qs}&limit=100`),
+      ]);
+
+      const pnlCls = (summary.total_pnl || 0) >= 0 ? "positive" : "negative";
+      document.getElementById("report-stats").innerHTML = [
+        statCard("Total", summary.total_trades || 0),
+        statCard("Closed", summary.closed_trades || 0),
+        statCard("Targets", summary.targets || 0),
+        statCard("Stop Losses", summary.stop_losses || 0),
+        statCard("Failures", summary.failures || 0),
+        statCard("Total PnL", `₹${Number(summary.total_pnl || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, pnlCls),
+      ].join("");
+
+      document.getElementById("trades-tbody").innerHTML = trades.trades.map(t => `<tr>
+        <td>${t.id}</td>
+        <td>${t.strategy_name}</td>
+        <td>${t.trading_symbol || t.symbol || "—"}</td>
+        <td><span class="status-pill ${t.status}">${t.status}</span></td>
+        <td>${fmtPrice(t.entry_fill_price || t.entry_price)}</td>
+        <td>${fmtPrice(t.exit_fill_price || t.exit_price)}</td>
+        <td>${fmtPnl(t.pnl)}</td>
+        <td>${(t.created_at || "").slice(0, 10)}</td>
+      </tr>`).join("") || '<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:2rem;">No trades yet</td></tr>';
+    }
+
+    async function populateFilter() {
+      const { strategies } = await api("/api/strategies");
+      const sel = document.getElementById("filter-strategy");
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All strategies</option>' +
+        strategies.map(s => `<option value="${s.name}">${s.name}</option>`).join("");
+      sel.value = current;
+    }
+
+    async function syncWithDhan(btn) {
+      const strategy = document.getElementById("filter-strategy")?.value || "";
+      const params = new URLSearchParams();
+      if (strategy) params.set("strategy", strategy);
+      const qs = params.toString() ? `?${params}` : "";
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Syncing…";
+      try {
+        const res = await api(`/api/reports/sync${qs}`, { method: "POST" });
+        toast(res.message);
+        await loadOverview();
+        if (document.getElementById("panel-reports").classList.contains("active")) {
+          await loadReports();
+        }
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    }
+
+    document.getElementById("filter-strategy").addEventListener("change", loadReports);
+    document.getElementById("refresh-reports").addEventListener("click", loadReports);
+    document.getElementById("sync-reports-btn").addEventListener("click", (e) => syncWithDhan(e.target));
+    document.getElementById("sync-overview-btn").addEventListener("click", (e) => syncWithDhan(e.target));
+    document.getElementById("export-btn").addEventListener("click", async () => {
+      const strategy = document.getElementById("filter-strategy").value;
+      const params = new URLSearchParams();
+      if (strategy) params.set("strategy", strategy);
+      const qs = params.toString() ? `?${params}` : "";
+      const key = getApiKey();
+      const headers = key ? { "X-API-Key": key } : {};
+      const res = await fetch(`/api/reports/export${qs}`, { headers });
+      if (!res.ok) { toast("Export failed", "error"); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `trades_export.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("CSV exported");
+    });
+
+    async function refreshAll() {
+      try {
+        await loadOverview();
+        await populateFilter();
+      } catch (e) {
+        toast(e.message, "error");
+      }
+    }
+
+    refreshAll();
+    setInterval(loadOverview, 60_000);
+  </script>
+</body>
+</html>

@@ -77,6 +77,26 @@ uv run trade-report --sync
 uv run run-reconcile-trades
 ```
 
+## Dashboard
+
+A web dashboard lets you toggle strategies, edit configs, view P&L, and export trades — **without redeploying**.
+
+```bash
+# Local
+export DASHBOARD_API_KEY=your_secret   # optional locally; required in production
+uv run run-dashboard
+# Open http://localhost:8080
+```
+
+On first run, configs are copied from `strategies/` into `data/strategy_config/` (volume-mounted in Docker). The scheduler and dashboard both read from `data/strategy_config/`, so changes via the UI take effect on the next scheduled run.
+
+**Tabs:**
+- **Overview** — P&L summary, open positions, today's schedule
+- **Strategies** — enable/disable instances, edit JSON config (validated on save)
+- **Reports** — trade history, filter by strategy, sync with Dhan, export CSV
+
+Set `DASHBOARD_API_KEY` in `.env` and enter the same key in the dashboard settings (⚙) when prompted.
+
 ## Run on VPS (Dokploy)
 
 Production uses the **scheduler** — it checks NSE trading days and launches strategies at their `run_at` times. BTST exits run automatically at 09:13 IST on trading days.
@@ -92,16 +112,13 @@ Production uses the **scheduler** — it checks NSE trading days and launches st
    - `TELEGRAM_CHAT_ID` (optional)
 4. Deploy. The scheduler container runs `run-scheduler` and restarts on failure.
 
-No domain or Traefik setup is needed — this is a background worker, not a web app.
+The **dashboard** service exposes port `8080`. Point a Dokploy domain at it (or access via VPS IP) and set `DASHBOARD_API_KEY` in Environment.
 
 ### Config changes on VPS
 
-Edit locally, commit, push, redeploy:
+**Preferred:** use the dashboard to toggle strategies and edit configs — saved to `data/strategy_config/` (persists in the `dhan_algo_data` volume, no redeploy).
 
-- `strategies/manifest.json` — enable/disable strategy instances
-- `strategies/configs/*.json` — per-strategy settings (`run_at`, lots, etc.)
-
-These files are baked into the Docker image on each deploy. Only runtime data (trades DB, scheduler state, NSE cache) lives in Docker volumes.
+**Alternatively:** edit `strategies/manifest.json` and `strategies/configs/*.json` locally, commit, push, redeploy (seeds defaults on first dashboard/scheduler start if runtime config is empty).
 
 ### Verify deployment
 
@@ -174,13 +191,20 @@ Order APIs require your **server's public IP** whitelisted on Dhan. The app atte
 
 ```
 strategies/
-  manifest.json          # Which strategies to run (enable/disable here)
-  configs/               # One JSON file per strategy instance
+  manifest.json          # Default strategy manifest (seed for runtime config)
+  configs/               # Default per-instance configs
+data/
+  strategy_config/       # Runtime configs (dashboard edits; volume-mounted)
+  trades.db              # Trade journal
+  scheduler_state.json   # Scheduler daily state
+dashboard/
+  app.py                 # FastAPI API + static UI
+  static/index.html
 scripts/
+  config_store.py        # Read/write runtime strategy config
   scheduler.py           # Trading-day scheduler
-  btst_exit.py           # BTST morning exit logic
+run_dashboard.py         # CLI: run-dashboard
 run_strategy.py          # CLI: run-strategies
 run_scheduler.py         # CLI: run-scheduler
-run_btst_exit.py         # CLI: run-btst-exit
-docker-compose.yml       # Dokploy / Docker production
+docker-compose.yml       # Dokploy / Docker production (scheduler + dashboard)
 ```
