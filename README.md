@@ -85,7 +85,7 @@ A web dashboard lets you toggle strategies, edit configs, view P&L, and export t
 # Local
 export DASHBOARD_API_KEY=your_secret   # optional locally; required in production
 uv run run-dashboard
-# Open http://localhost:8080
+# Open http://localhost:8090
 ```
 
 On first run, configs are copied from `strategies/` into `data/strategy_config/` (volume-mounted in Docker). The scheduler and dashboard both read from `data/strategy_config/`, so changes via the UI take effect on the next scheduled run.
@@ -112,7 +112,7 @@ Production uses the **scheduler** — it checks NSE trading days and launches st
    - `TELEGRAM_CHAT_ID` (optional)
 4. Deploy. The scheduler container runs `run-scheduler` and restarts on failure.
 
-The **dashboard** service exposes port `8080`. Point a Dokploy domain at it (or access via VPS IP) and set `DASHBOARD_API_KEY` in Environment.
+The **dashboard** service exposes port `8090`. Point a Dokploy domain at it (or access via VPS IP) and set `DASHBOARD_API_KEY` in Environment.
 
 ### Config changes on VPS
 

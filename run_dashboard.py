@@ -9,7 +9,7 @@ import os
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the dhan-algo dashboard.")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
+    parser.add_argument("--port", type=int, default=8090, help="Bind port (default: 8090)")
     args = parser.parse_args(argv)
 
     import uvicorn
