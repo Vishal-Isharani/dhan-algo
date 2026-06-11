@@ -25,3 +25,5 @@ RUN uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:${PATH}"
 
 CMD ["run-scheduler"]
+
+EXPOSE 8090
