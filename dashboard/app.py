@@ -41,6 +41,26 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 
+class ReportQueryParams:
+    def __init__(
+        self,
+        strategy: str | None = Query(default=None),
+        strategy_type: str | None = Query(default=None, alias="type"),
+        status: str | None = Query(default=None),
+        date_from: str | None = Query(default=None),
+        date_to: str | None = Query(default=None),
+        sort_by: str = Query(default="id"),
+        sort_order: str = Query(default="desc"),
+    ) -> None:
+        self.strategy_name = strategy
+        self.strategy_type = strategy_type
+        self.status = status
+        self.date_from = date_from
+        self.date_to = date_to
+        self.sort_by = sort_by
+        self.sort_order = sort_order
+
+
 def _check_api_key(x_api_key: str | None = Header(default=None)) -> None:
     expected = os.environ.get("DASHBOARD_API_KEY", "").strip()
     if expected and x_api_key != expected:
@@ -92,24 +112,37 @@ def save_strategy_config(name: str, body: ConfigUpdate) -> dict:
 
 
 @app.get("/api/reports/summary", dependencies=[Depends(_check_api_key)])
-def report_summary(
-    strategy: str | None = Query(default=None),
-    strategy_type: str | None = Query(default=None, alias="type"),
-) -> dict:
-    return summary_stats(strategy_name=strategy, strategy_type=strategy_type)
+def report_summary(filters: ReportQueryParams = Depends()) -> dict:
+    try:
+        return summary_stats(
+            strategy_name=filters.strategy_name,
+            strategy_type=filters.strategy_type,
+            status=filters.status,
+            date_from=filters.date_from,
+            date_to=filters.date_to,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/reports/trades", dependencies=[Depends(_check_api_key)])
 def report_trades(
-    strategy: str | None = Query(default=None),
-    strategy_type: str | None = Query(default=None, alias="type"),
-    limit: int = Query(default=50, ge=1, le=500),
+    filters: ReportQueryParams = Depends(),
+    limit: int = Query(default=100, ge=1, le=500),
 ) -> dict:
-    trades = list_trades(
-        strategy_name=strategy,
-        strategy_type=strategy_type,
-        limit=limit,
-    )
+    try:
+        trades = list_trades(
+            strategy_name=filters.strategy_name,
+            strategy_type=filters.strategy_type,
+            status=filters.status,
+            date_from=filters.date_from,
+            date_to=filters.date_to,
+            sort_by=filters.sort_by,
+            sort_order=filters.sort_order,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"trades": trades, "count": len(trades)}
 
 
@@ -152,23 +185,27 @@ def sync_trades(
 
 
 @app.get("/api/reports/export", dependencies=[Depends(_check_api_key)])
-def export_csv(
-    strategy: str | None = Query(default=None),
-    strategy_type: str | None = Query(default=None, alias="type"),
-) -> StreamingResponse:
+def export_csv(filters: ReportQueryParams = Depends()) -> StreamingResponse:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
         tmp_path = tmp.name
     try:
-        count = export_trades_csv(
+        export_trades_csv(
             tmp_path,
-            strategy_name=strategy,
-            strategy_type=strategy_type,
+            strategy_name=filters.strategy_name,
+            strategy_type=filters.strategy_type,
+            status=filters.status,
+            date_from=filters.date_from,
+            date_to=filters.date_to,
+            sort_by=filters.sort_by,
+            sort_order=filters.sort_order,
         )
         content = Path(tmp_path).read_text(encoding="utf-8")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
-    label = strategy or strategy_type or "all"
+    label = filters.strategy_name or filters.strategy_type or "all"
     filename = f"trades_{label}_{datetime.now(IST).strftime('%Y%m%d')}.csv"
     return StreamingResponse(
         io.BytesIO(content.encode("utf-8")),

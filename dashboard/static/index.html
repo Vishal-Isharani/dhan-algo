@@ -129,32 +129,93 @@
 
         <!-- Reports -->
         <section data-panel="reports" class="space-y-6">
-          <div class="flex flex-wrap items-center gap-3">
-            <select id="filter-strategy" class="rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none">
-              <option value="">All strategies</option>
-            </select>
-            <button id="sync-reports-btn" class="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition hover:border-blue-500 hover:text-blue-400">Sync with Dhan</button>
-            <button id="export-btn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500">Export CSV</button>
-            <button id="refresh-reports" class="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-gray-700">Refresh</button>
+          <div class="rounded-xl border border-gray-800 bg-gray-900 p-4">
+            <div class="mb-3 flex items-center justify-between">
+              <h3 class="text-sm font-semibold text-white">Filters</h3>
+              <button id="clear-filters-btn" class="text-xs font-medium text-gray-500 hover:text-blue-400">Clear all</button>
+            </div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">Strategy</label>
+                <select id="filter-strategy" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none">
+                  <option value="">All strategies</option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">Status</label>
+                <select id="filter-status" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none">
+                  <option value="">All statuses</option>
+                  <option value="open">Open</option>
+                  <option value="target">Target</option>
+                  <option value="stop_loss">Stop loss</option>
+                  <option value="closed">Closed</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">From date</label>
+                <input type="date" id="filter-date-from" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">To date</label>
+                <input type="date" id="filter-date-to" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">Sort by</label>
+                <select id="filter-sort-by" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none">
+                  <option value="id">ID</option>
+                  <option value="date">Date</option>
+                  <option value="strategy">Strategy</option>
+                  <option value="symbol">Symbol</option>
+                  <option value="status">Status</option>
+                  <option value="entry">Entry price</option>
+                  <option value="exit">Exit price</option>
+                  <option value="pnl">PnL</option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1 block text-xs text-gray-500">Order / Limit</label>
+                <div class="flex gap-2">
+                  <select id="filter-sort-order" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none">
+                    <option value="desc">Desc</option>
+                    <option value="asc">Asc</option>
+                  </select>
+                  <select id="filter-limit" class="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none">
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 flex flex-wrap gap-3">
+              <button id="apply-filters-btn" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500">Apply filters</button>
+              <button id="sync-reports-btn" class="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition hover:border-blue-500 hover:text-blue-400">Sync with Dhan</button>
+              <button id="export-btn" class="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition hover:border-emerald-500 hover:text-emerald-400">Export CSV</button>
+              <button id="refresh-reports" class="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-gray-700">Refresh</button>
+            </div>
           </div>
           <div id="report-stats" class="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6"></div>
           <div class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
-            <div class="border-b border-gray-800 px-6 py-4">
-              <h2 class="font-semibold text-white">Trade History</h2>
-              <p class="text-xs text-gray-500">Last 100 trades from SQLite</p>
+            <div class="flex items-center justify-between border-b border-gray-800 px-6 py-4">
+              <div>
+                <h2 class="font-semibold text-white">Trade History</h2>
+                <p id="trades-count-label" class="text-xs text-gray-500">—</p>
+              </div>
             </div>
             <div class="overflow-x-auto">
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-gray-800 bg-gray-800/50 text-xs uppercase tracking-wider text-gray-500">
-                  <tr>
-                    <th class="px-6 py-3 font-medium">ID</th>
-                    <th class="px-6 py-3 font-medium">Strategy</th>
-                    <th class="px-6 py-3 font-medium">Symbol</th>
-                    <th class="px-6 py-3 font-medium">Status</th>
-                    <th class="px-6 py-3 font-medium">Entry</th>
-                    <th class="px-6 py-3 font-medium">Exit</th>
-                    <th class="px-6 py-3 font-medium">PnL</th>
-                    <th class="px-6 py-3 font-medium">Date</th>
+                  <tr id="trades-thead">
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="id">ID <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="strategy">Strategy <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="symbol">Symbol <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="status">Status <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="entry">Entry <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="exit">Exit <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="pnl">PnL <span class="sort-icon"></span></th>
+                    <th class="sortable px-6 py-3 font-medium cursor-pointer select-none hover:text-white" data-sort="date">Date <span class="sort-icon"></span></th>
                   </tr>
                 </thead>
                 <tbody id="trades-tbody" class="divide-y divide-gray-800"></tbody>
@@ -467,11 +528,50 @@
       });
     }
 
-    async function loadReports() {
+    function getReportFilters() {
       const strategy = document.getElementById("filter-strategy").value;
-      const filter = strategy ? { strategy } : {};
-      const summaryQs = buildQuery(filter);
-      const tradesQs = buildQuery({ ...filter, limit: 100 });
+      const status = document.getElementById("filter-status").value;
+      const dateFrom = document.getElementById("filter-date-from").value;
+      const dateTo = document.getElementById("filter-date-to").value;
+      const sortBy = document.getElementById("filter-sort-by").value;
+      const sortOrder = document.getElementById("filter-sort-order").value;
+      const limit = document.getElementById("filter-limit").value;
+      const filters = { sort_by: sortBy, sort_order: sortOrder, limit };
+      if (strategy) filters.strategy = strategy;
+      if (status) filters.status = status;
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
+      return filters;
+    }
+
+    function updateSortIcons() {
+      const sortBy = document.getElementById("filter-sort-by").value;
+      const sortOrder = document.getElementById("filter-sort-order").value;
+      document.querySelectorAll("#trades-thead .sortable").forEach(th => {
+        const icon = th.querySelector(".sort-icon");
+        const active = th.dataset.sort === sortBy;
+        icon.textContent = active ? (sortOrder === "asc" ? " ↑" : " ↓") : "";
+        th.classList.toggle("text-blue-400", active);
+        th.classList.toggle("text-gray-500", !active);
+      });
+    }
+
+    function clearReportFilters() {
+      document.getElementById("filter-strategy").value = "";
+      document.getElementById("filter-status").value = "";
+      document.getElementById("filter-date-from").value = "";
+      document.getElementById("filter-date-to").value = "";
+      document.getElementById("filter-sort-by").value = "id";
+      document.getElementById("filter-sort-order").value = "desc";
+      document.getElementById("filter-limit").value = "100";
+      loadReports();
+    }
+
+    async function loadReports() {
+      const filters = getReportFilters();
+      const { limit, ...summaryFilters } = filters;
+      const summaryQs = buildQuery(summaryFilters);
+      const tradesQs = buildQuery(filters);
 
       const [summary, trades] = await Promise.all([
         api(`/api/reports/summary${summaryQs}`),
@@ -488,6 +588,17 @@
         statCard("Total PnL", `₹${pnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, { accent: "purple", positive: pnl >= 0 }),
       ].join("");
 
+      const activeFilters = [];
+      if (filters.strategy) activeFilters.push(filters.strategy);
+      if (filters.status) activeFilters.push(filters.status);
+      if (filters.date_from) activeFilters.push(`from ${filters.date_from}`);
+      if (filters.date_to) activeFilters.push(`to ${filters.date_to}`);
+      const filterLabel = activeFilters.length ? ` · ${activeFilters.join(", ")}` : "";
+      document.getElementById("trades-count-label").textContent =
+        `Showing ${trades.count} trade(s) · sorted by ${filters.sort_by} ${filters.sort_order}${filterLabel}`;
+
+      updateSortIcons();
+
       document.getElementById("trades-tbody").innerHTML = trades.trades.length
         ? trades.trades.map(t => `<tr class="hover:bg-gray-800/40">
             <td class="px-6 py-3.5 font-mono text-gray-400">#${t.id}</td>
@@ -499,7 +610,7 @@
             <td class="px-6 py-3.5">${fmtPnl(t.pnl)}</td>
             <td class="px-6 py-3.5 text-gray-500">${(t.created_at || "").slice(0, 10)}</td>
           </tr>`).join("")
-        : `<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">No trades recorded yet</td></tr>`;
+        : `<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">No trades match these filters</td></tr>`;
     }
 
     async function populateFilter() {
@@ -532,13 +643,36 @@
       }
     }
 
-    document.getElementById("filter-strategy").addEventListener("change", loadReports);
+    document.querySelectorAll("#trades-thead .sortable").forEach(th => {
+      th.addEventListener("click", () => {
+        const col = th.dataset.sort;
+        const sortByEl = document.getElementById("filter-sort-by");
+        const sortOrderEl = document.getElementById("filter-sort-order");
+        if (sortByEl.value === col) {
+          sortOrderEl.value = sortOrderEl.value === "desc" ? "asc" : "desc";
+        } else {
+          sortByEl.value = col;
+          sortOrderEl.value = col === "pnl" || col === "date" || col === "id" ? "desc" : "asc";
+        }
+        loadReports();
+      });
+    });
+
+    ["filter-strategy", "filter-status", "filter-sort-by", "filter-sort-order", "filter-limit"].forEach(id => {
+      document.getElementById(id).addEventListener("change", loadReports);
+    });
+    ["filter-date-from", "filter-date-to"].forEach(id => {
+      document.getElementById(id).addEventListener("change", loadReports);
+    });
+
+    document.getElementById("apply-filters-btn").addEventListener("click", loadReports);
+    document.getElementById("clear-filters-btn").addEventListener("click", clearReportFilters);
     document.getElementById("refresh-reports").addEventListener("click", loadReports);
     document.getElementById("sync-reports-btn").addEventListener("click", (e) => syncWithDhan(e.target));
     document.getElementById("sync-overview-btn").addEventListener("click", (e) => syncWithDhan(e.target));
     document.getElementById("export-btn").addEventListener("click", async () => {
-      const strategy = document.getElementById("filter-strategy").value;
-      const qs = buildQuery(strategy ? { strategy } : {});
+      const { limit, ...exportFilters } = getReportFilters();
+      const qs = buildQuery(exportFilters);
       const key = getApiKey();
       const headers = key ? { "X-API-Key": key } : {};
       const res = await fetch(`/api/reports/export${qs}`, { headers });

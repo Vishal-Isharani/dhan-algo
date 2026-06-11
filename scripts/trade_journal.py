@@ -322,6 +322,71 @@ def already_traded_today(strategy_name: str, day: date | None = None) -> bool:
     return False
 
 
+VALID_STATUSES = frozenset({"open", "target", "stop_loss", "closed", "failed"})
+SORT_COLUMNS = {
+    "id": "id",
+    "date": "created_at",
+    "created_at": "created_at",
+    "strategy": "strategy_name",
+    "strategy_name": "strategy_name",
+    "symbol": "COALESCE(trading_symbol, symbol)",
+    "status": "status",
+    "pnl": "pnl",
+    "entry": "COALESCE(entry_fill_price, entry_price)",
+    "exit": "COALESCE(exit_fill_price, exit_price)",
+}
+
+
+def _parse_filter_date(value: str, *, end_of_day: bool = False) -> str:
+    parsed = date.fromisoformat(value[:10])
+    if end_of_day:
+        return datetime(parsed.year, parsed.month, parsed.day, 23, 59, 59, tzinfo=IST).isoformat()
+    return datetime(parsed.year, parsed.month, parsed.day, 0, 0, 0, tzinfo=IST).isoformat()
+
+
+def _trade_filter_clauses(
+    *,
+    strategy_name: str | None = None,
+    strategy_type: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> tuple[list[str], list]:
+    clauses: list[str] = []
+    params: list = []
+
+    if strategy_name:
+        clauses.append("strategy_name = ?")
+        params.append(strategy_name)
+    if strategy_type:
+        clauses.append("strategy_type = ?")
+        params.append(strategy_type)
+    if status:
+        if status not in VALID_STATUSES:
+            raise ValueError(f"Invalid status '{status}'. Allowed: {', '.join(sorted(VALID_STATUSES))}")
+        clauses.append("status = ?")
+        params.append(status)
+    if date_from:
+        clauses.append("created_at >= ?")
+        params.append(_parse_filter_date(date_from))
+    if date_to:
+        clauses.append("created_at <= ?")
+        params.append(_parse_filter_date(date_to, end_of_day=True))
+
+    return clauses, params
+
+
+def _resolve_sort(sort_by: str = "id", sort_order: str = "desc") -> str:
+    column = SORT_COLUMNS.get(sort_by)
+    if column is None:
+        allowed = ", ".join(sorted(SORT_COLUMNS))
+        raise ValueError(f"Invalid sort_by '{sort_by}'. Allowed: {allowed}")
+    order = sort_order.lower()
+    if order not in {"asc", "desc"}:
+        raise ValueError("sort_order must be 'asc' or 'desc'")
+    return f" ORDER BY {column} {order.upper()}"
+
+
 def get_open_trades(
     *,
     strategy_name: str | None = None,
@@ -348,20 +413,24 @@ def list_trades(
     *,
     strategy_name: str | None = None,
     strategy_type: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = "id",
+    sort_order: str = "desc",
     limit: int | None = 50,
 ) -> list[dict]:
     query = "SELECT * FROM trades"
-    filters: list[str] = []
-    params: list = []
-    if strategy_name:
-        filters.append("strategy_name = ?")
-        params.append(strategy_name)
-    if strategy_type:
-        filters.append("strategy_type = ?")
-        params.append(strategy_type)
+    filters, params = _trade_filter_clauses(
+        strategy_name=strategy_name,
+        strategy_type=strategy_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+    )
     if filters:
         query += " WHERE " + " AND ".join(filters)
-    query += " ORDER BY id DESC"
+    query += _resolve_sort(sort_by, sort_order)
     if limit is not None:
         query += " LIMIT ?"
         params.append(limit)
@@ -375,6 +444,9 @@ def summary_stats(
     *,
     strategy_name: str | None = None,
     strategy_type: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
 ) -> dict:
     query = """
         SELECT
@@ -388,14 +460,13 @@ def summary_stats(
             ROUND(AVG(CASE WHEN pnl IS NOT NULL THEN pnl END), 2) AS avg_pnl
         FROM trades
     """
-    filters: list[str] = []
-    params: list = []
-    if strategy_name:
-        filters.append("strategy_name = ?")
-        params.append(strategy_name)
-    if strategy_type:
-        filters.append("strategy_type = ?")
-        params.append(strategy_type)
+    filters, params = _trade_filter_clauses(
+        strategy_name=strategy_name,
+        strategy_type=strategy_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+    )
     if filters:
         query += " WHERE " + " AND ".join(filters)
 
@@ -409,10 +480,24 @@ def export_trades_csv(
     *,
     strategy_name: str | None = None,
     strategy_type: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    sort_by: str = "id",
+    sort_order: str = "desc",
 ) -> int:
     """Export all matching trades to CSV. Returns number of rows written."""
 
-    rows = list_trades(strategy_name=strategy_name, strategy_type=strategy_type, limit=None)
+    rows = list_trades(
+        strategy_name=strategy_name,
+        strategy_type=strategy_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=None,
+    )
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
 
