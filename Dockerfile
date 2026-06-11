@@ -24,6 +24,7 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:${PATH}"
 
-CMD ["run-scheduler"]
-
+# Dashboard service (Dokploy domain routing reads this)
 EXPOSE 8090
+
+CMD ["run-scheduler"]

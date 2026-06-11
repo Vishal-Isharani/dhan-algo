@@ -112,7 +112,7 @@ Production uses the **scheduler** — it checks NSE trading days and launches st
    - `TELEGRAM_CHAT_ID` (optional)
 4. Deploy. The scheduler container runs `run-scheduler` and restarts on failure.
 
-The **dashboard** service exposes port `8090`. Point a Dokploy domain at it (or access via VPS IP) and set `DASHBOARD_API_KEY` in Environment.
+The **dashboard** service listens on port `8090` (`EXPOSE` in `Dockerfile` — required for Dokploy domain routing). In Dokploy Domains: service `dashboard`, container port `8090`, HTTPS off for sslip.io. Set `DASHBOARD_API_KEY` in Environment.
 
 ### Config changes on VPS
 
